@@ -107,6 +107,13 @@ post-training-check:
 post-training-report:
 	$(PYTHON) -m recipe_lab post-training --report docs/MLLM-POST-TRAINING.md
 
+# Agent 交接契约：人类可读入口 + 机器可读清单 + 生成物可重建性校验。
+agent-check:
+	$(PYTHON) -m recipe_lab handoff --check
+
+agent-report:
+	$(PYTHON) -m recipe_lab handoff --report
+
 baseline-dry-run:
 	$(PYTHON) -m recipe_lab baseline --dry-run
 
@@ -201,6 +208,7 @@ report: matrix
 	$(PYTHON) -m recipe_lab baseline --report
 	$(PYTHON) -m recipe_lab methodology --report docs/METHODOLOGY.md
 	$(PYTHON) -m recipe_lab post-training --report docs/MLLM-POST-TRAINING.md
+	$(PYTHON) -m recipe_lab handoff --report
 
 test:
 	$(PYTHON) -m pytest -q
@@ -209,5 +217,5 @@ test:
 # 不应让仓库因为诚实记录了风险而永远红灯。发布前单独跑 make validate-strict。
 # 两个 --check 校验的都是审计完整性（等级/状态无虚报、证据可追溯），
 # 不因为「0/14 可复现」「0/14 到 B2」而失败（ADR-008 / ADR-010）。
-ci: doctor validate-l6 test repro-check baseline-check capabilities-check feasibility-check methodology-check post-training-check suite-dry-run fim-dry-run xlam-dry-run rapidfire-dry-run granite-dry-run paligemma-dry-run fim-suite-dry-run fim-export-dry-run xlam-suite-dry-run xlam-export-dry-run rapidfire-suite-dry-run rapidfire-export-dry-run granite-suite-dry-run granite-export-dry-run paligemma-suite-dry-run paligemma-export-dry-run
+ci: doctor validate-l6 test repro-check baseline-check capabilities-check feasibility-check methodology-check post-training-check agent-check suite-dry-run fim-dry-run xlam-dry-run rapidfire-dry-run granite-dry-run paligemma-dry-run fim-suite-dry-run fim-export-dry-run xlam-suite-dry-run xlam-export-dry-run rapidfire-suite-dry-run rapidfire-export-dry-run granite-suite-dry-run granite-export-dry-run paligemma-suite-dry-run paligemma-export-dry-run
 	@echo "CI 通过（0 error）。提升 status / repro.level / baseline_contract.state 前请单独运行 make validate-strict 复核 warning。"

@@ -18,7 +18,7 @@ jobs:
       - name: 安装测试依赖（核心工具链本身零依赖）
         run: python -m pip install pytest
 
-      - name: CI 门禁（doctor + L0-L6 校验 + 单测 + 审计完整性/能力矩阵/可行性/方法论依据/方向层检查）
+      - name: CI 门禁（doctor + L0-L6 校验 + 单测 + 五层审计 + Agent 交接契约 + dry-run 检查）
         run: make ci
 
       - name: 执行层与发布级 dry-run 冒烟（不装训练框架、不需要 GPU）
@@ -57,10 +57,10 @@ jobs:
           PYTHONPATH=src python3 runner/train.py --recipe llm/grpo/qwen2-0-5b-numinamath --train-seed 43 --output-root "$PWD/runs/seed-preview" --dry-run --json
           PYTHONPATH=src python3 runner/export.py --recipe llm/grpo/qwen2-0-5b-numinamath --checkpoint "$PWD/runs/absent/full" --evaluation "$PWD/runs/absent/eval/evaluation.json" --output "$PWD/runs/export-preview" --dry-run
 
-      - name: 检查五份生成物与配置同步
+      - name: 检查七份生成物与配置同步
         run: |
           make report
-          git diff --exit-code -- docs/MATRIX.md docs/REPRODUCIBILITY.md docs/BASELINE-READINESS.md docs/METHODOLOGY.md docs/MLLM-POST-TRAINING.md
+          git diff --exit-code -- docs/MATRIX.md docs/REPRODUCIBILITY.md docs/BASELINE-READINESS.md docs/METHODOLOGY.md docs/MLLM-POST-TRAINING.md docs/AGENT-HANDOFF.md docs/AGENT-HANDOFF.json
 
       - name: 严格模式报告（不阻塞，供人工复核待办）
         if: always()

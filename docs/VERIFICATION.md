@@ -134,6 +134,15 @@ arXiv 2503.06072 只能作 `cross_check`，`Awesome-MLLM-Tuning` 只能作 `meth
 见 [MLLM-POST-TRAINING.md](MLLM-POST-TRAINING.md)（生成）与
 `tests/test_post_training.py`（27 项）。
 
+**交接另有契约**：`AGENTS.md` / `registry/agent_contract.toml` / `recipe-lab handoff`（ADR-026）
+把人与 Agent 的入口收敛到同一事实源：人类看 `docs/AGENT-HANDOFF.md`，
+Agent 看 `docs/AGENT-HANDOFF.json`。`handoff --check` 用真实 CLI 重建五份生成报告并逐字节比较；
+任一报告与当前源码/注册表不一致、事实源缺失、命令枚举错误或 Guardrails 漂移都失败关闭。
+这不是第六层审计：`pass` 命令是日常门禁，`fail_closed` 命令是提升目标，
+静态检查仍不认证 GPU 执行、不解锁 B2/B3。未得明确要求不得 push。
+见 [AGENT-HANDOFF.md](AGENT-HANDOFF.md) / [AGENT-HANDOFF.json](AGENT-HANDOFF.json)（生成）与
+`tests/test_agent_contract.py`（21 项）。
+
 `G1 可引用` / `G2 可重放` / `G3 可对照` / `G4 可交付` 四组各带 `min_state`，
 `R603` 用同一个 `compute_state()` 重算并与 `baseline_contract.state` 比对，
 虚报即 error。B1 只代表「命令与参数确定、可以 dry-run」，**不代表跑通过一次**：
@@ -259,10 +268,12 @@ CI（`.github/workflows/validate.yml`）执行：
 `doctor` → `validate --level l6`（0 error，含 L5 + L6）→ `pytest` →
 `repro --check` + `baseline --check`（审计完整性）+ `capabilities --check`（五维覆盖）+
 `feasibility --check`（原理层）+ `methodology --check`（论文一手字段与引用闭合）+
-`post-training --check`（方向层映射与来源边界）→
+`post-training --check`（方向层映射与来源边界）+
+`handoff --check`（交接契约与生成物可重建性）→
 三个 runner 入口的 dry-run 冒烟 → 重建 `docs/MATRIX.md`、
 `docs/REPRODUCIBILITY.md`、`docs/BASELINE-READINESS.md`、`docs/METHODOLOGY.md`、
-`docs/MLLM-POST-TRAINING.md` 并检查 `git diff --exit-code`，防止有人手改生成物。
+`docs/MLLM-POST-TRAINING.md`、`docs/AGENT-HANDOFF.md`、`docs/AGENT-HANDOFF.json`
+并检查 `git diff --exit-code`，防止有人手改生成物。
 
 `--strict` 留给**提升 `status` 之前**的复核，例如把某篇从 `ported` 推进到
 `smoke-passed` 时，先把该篇的 warning 清零：

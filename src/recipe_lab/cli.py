@@ -602,6 +602,51 @@ def cmd_post_training(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def cmd_handoff(args: argparse.Namespace) -> int:
+    """Agent 交接契约：人类可读视图 + 机器可读清单 + 生成物可重建性校验。"""
+    from .agent_contract import audit, load, render_json, render_markdown, verify_regeneration
+
+    root = _root()
+    recipes = load_recipes(root)
+    checked = audit(root, recipes)
+    if args.check and checked.ok:
+        checked = verify_regeneration(root, checked)
+    data = load(root)
+    if args.report:
+        md = Path(data.get("handoff_md", "docs/AGENT-HANDOFF.md"))
+        js = Path(data.get("handoff_json", "docs/AGENT-HANDOFF.json"))
+        md = (root / md) if not md.is_absolute() else md
+        js = (root / js) if not js.is_absolute() else js
+        for out in (md, js):
+            out.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text(render_markdown(root, checked), encoding="utf-8")
+        js.write_text(render_json(root, checked), encoding="utf-8")
+        print(f"已生成 {_display_path(md, root)} 与 {_display_path(js, root)}")
+        if not args.check and not args.json:
+            return 0 if checked.ok else 1
+    if args.json:
+        print(render_json(root, checked), end="")
+    elif not args.report:
+        c = checked.facts
+        print(f"Agent 交接契约 v{data.get('contract_version', '-')}："
+              f"{c.get('recipes', 0)} 篇 / {c.get('post_training_directions', 0)} 方向 / "
+              f"事实源 {len(data.get('sources_of_truth', []))} 条 / "
+              f"生成物 {len(checked.artifacts)} 份 / 错误 {len(checked.errors)}")
+        print(f"  GPU verified {c.get('gpu_verified', 0)}、B2+/B3 与 eligible 仍独立判定；"
+              f"提升目标保持失败关闭")
+    if not args.json:
+        print(f"\nrecipe-lab handoff --check · {_display_path(root, root)}")
+        print(f"  契约状态：{'通过' if checked.ok else '未通过'}；"
+              f"生成物可重建性：{'已校验' if checked.regeneration_checked else '未校验'}")
+        if checked.errors:
+            print("交接契约未通过：")
+            for line in checked.errors:
+                print("  [FAIL] " + line)
+        else:
+            print("  [ok] 事实源、生成物、命令契约与 Guardrails 完整")
+    return 1 if checked.errors else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="recipe-lab", description="LLM/VLM recipe 登记与验证")
     p.add_argument("--version", action="version", version=f"recipe-lab {__version__}")
@@ -700,6 +745,12 @@ def build_parser() -> argparse.ArgumentParser:
                     metavar="PATH", help="生成 Markdown 方向覆盖报告")
     pt.add_argument("--json", action="store_true")
     pt.set_defaults(func=cmd_post_training)
+
+    ph = sub.add_parser("handoff", help="Agent 交接契约：人类可读入口与机器可复现清单")
+    ph.add_argument("--check", action="store_true", help="校验契约与生成物能否由当前源码重建")
+    ph.add_argument("--report", action="store_true", help="生成 AGENT-HANDOFF.md 与 .json")
+    ph.add_argument("--json", action="store_true", help="输出机器可读交接清单")
+    ph.set_defaults(func=cmd_handoff)
     return p
 
 

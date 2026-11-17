@@ -1,0 +1,263 @@
+{
+  "assessed_at": "2026-11-17",
+  "commands": [
+    {
+      "argv": [
+        "doctor"
+      ],
+      "expectation": "pass",
+      "id": "doctor",
+      "purpose": "仓库根、tomllib、taxonomy 与 recipe.toml 可解析"
+    },
+    {
+      "argv": [
+        "validate",
+        "--level",
+        "l6"
+      ],
+      "expectation": "pass",
+      "id": "validate-l6",
+      "purpose": "L0–L6 契约校验；warning 是登记的待办风险，不阻塞 CI"
+    },
+    {
+      "argv": [
+        "make",
+        "ci"
+      ],
+      "expectation": "pass",
+      "id": "ci",
+      "purpose": "doctor + L0–L6 + 单测 + 五层审计 + dry-run 冒烟"
+    },
+    {
+      "argv": [
+        "make",
+        "report"
+      ],
+      "expectation": "pass",
+      "id": "report",
+      "purpose": "重建五份生成报告；随后必须检查 git diff --exit-code"
+    },
+    {
+      "argv": [
+        "handoff",
+        "--check"
+      ],
+      "expectation": "pass",
+      "id": "handoff-check",
+      "purpose": "校验交接契约、生成物可重建性与门禁登记未漂移"
+    },
+    {
+      "argv": [
+        "baseline",
+        "--check",
+        "--min-state",
+        "B2"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-b2",
+      "purpose": "当前不得宣称任何篇达到 research-ready"
+    },
+    {
+      "argv": [
+        "baseline",
+        "--check",
+        "--min-state",
+        "B3"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-b3",
+      "purpose": "当前不得宣称任何篇达到 business-ready"
+    },
+    {
+      "argv": [
+        "repro",
+        "--check",
+        "--min-level",
+        "L2"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-l2",
+      "purpose": "当前不得宣称上游实验完全锁定"
+    },
+    {
+      "argv": [
+        "feasibility",
+        "--check",
+        "--min-state",
+        "B2"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-feasibility-b2",
+      "purpose": "当前不得把任何篇判为可直接晋级"
+    },
+    {
+      "argv": [
+        "methodology",
+        "--check",
+        "--min-verified-papers",
+        "99"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-methodology",
+      "purpose": "一手核实论文数量提升目标；当前 20/23"
+    },
+    {
+      "argv": [
+        "post-training",
+        "--check",
+        "--min-fivedim-directions",
+        "5"
+      ],
+      "expectation": "fail_closed",
+      "id": "gate-post-training",
+      "purpose": "方向覆盖提升目标；当前 4/5，偏好校准为缺口"
+    }
+  ],
+  "contract_version": "1.0.0",
+  "entrypoint": "python3 -m recipe_lab",
+  "errors": [],
+  "facts": {
+    "eligible": 0,
+    "gap_directions": 1,
+    "gpu_verified": 0,
+    "implemented_directions": 4,
+    "implemented_recipes": 6,
+    "methodology_papers": 23,
+    "post_training_directions": 5,
+    "principle_blocked_recipes": [
+      "vlm/sft/qwen2-vl-7b-chartqa",
+      "vlm/sft/smolvlm-chartqa"
+    ],
+    "recipes": 14,
+    "verified_papers": 20
+  },
+  "generated_artifacts": [
+    {
+      "argv": [
+        "matrix",
+        "--out",
+        "{out}"
+      ],
+      "bytes": 5926,
+      "path": "docs/MATRIX.md",
+      "purpose": "全量 14 篇索引与五维矩阵",
+      "sha256": "5b558e12f7728d058ff3b955fd1b6ef864090444747ebfddcc4a5a6ed4380068"
+    },
+    {
+      "argv": [
+        "repro",
+        "--report",
+        "{out}"
+      ],
+      "bytes": 25557,
+      "path": "docs/REPRODUCIBILITY.md",
+      "purpose": "上游可复现性历史审计",
+      "sha256": "36df533d1b1977d346ad8ce5aaea9de05642603198aee397c151c0925f4caee1"
+    },
+    {
+      "argv": [
+        "baseline",
+        "--report",
+        "{out}"
+      ],
+      "bytes": 60462,
+      "path": "docs/BASELINE-READINESS.md",
+      "purpose": "B0–B3 就绪、能力矩阵与缺口",
+      "sha256": "fc3bf84c405d5b06c07c323623023d63fc6790d35c6262ff467f9f6401caecf6"
+    },
+    {
+      "argv": [
+        "methodology",
+        "--report",
+        "{out}"
+      ],
+      "bytes": 10375,
+      "path": "docs/METHODOLOGY.md",
+      "purpose": "方法论依据、一手论文核查与编号更正",
+      "sha256": "7c4f0b74fadc8934bf526beccab2c45e929c1cf3625281e48300b6ca2e7e1402"
+    },
+    {
+      "argv": [
+        "post-training",
+        "--report",
+        "{out}"
+      ],
+      "bytes": 7820,
+      "path": "docs/MLLM-POST-TRAINING.md",
+      "purpose": "MLLM 后训练五方向与逐篇映射",
+      "sha256": "a57bb78819042db74c12c9d8292a81a5a53e2e6d6d4d9add13a615dcf96d6b8c"
+    }
+  ],
+  "guardrails": [
+    {
+      "id": "source-of-truth",
+      "statement": "先改 registry / src / recipes / tests，再运行 make report；不要手改 docs 下的生成报告。"
+    },
+    {
+      "id": "no-static-verification",
+      "statement": "静态 JSON、hash、测试通过和 dry-run 只证明内部一致性，不认证 GPU 执行，也不解锁 B2/B3。"
+    },
+    {
+      "id": "no-blocked-override",
+      "statement": "blocked_zero_train 与 contaminated_pretraining 是原理性阻塞；不得靠补证据或论文背书绕过。"
+    },
+    {
+      "id": "no-hidden-promotion",
+      "statement": "提升目标必须失败关闭；不得把 --min-* 目标改成当前值来制造绿灯。"
+    },
+    {
+      "id": "no-unasked-push",
+      "statement": "不要自行创建远端、push 或对外发布；只有用户明确要求时执行。"
+    },
+    {
+      "id": "source-boundary",
+      "statement": "MLLM 五方向只能引用 preprints 202607.1494 摘要级框架；arXiv 2503.06072 与 Awesome-MLLM-Tuning 只作交叉印证 / 方法索引。"
+    }
+  ],
+  "ok": true,
+  "python_min": "3.11",
+  "root_marker": "registry/taxonomy.toml",
+  "schema": 1,
+  "sources_of_truth": [
+    {
+      "path": "recipes/**/recipe.toml",
+      "purpose": "14 篇配方的单一事实源；训练/评估协议与内容身份只取任务专用段"
+    },
+    {
+      "path": "registry/taxonomy.toml",
+      "purpose": "family / trainer / 兼容矩阵与仓库根标记"
+    },
+    {
+      "path": "registry/reproducibility.toml",
+      "purpose": "上游可复现性 L0–L4 判定"
+    },
+    {
+      "path": "registry/baseline.toml",
+      "purpose": "B0–B3 就绪规则与退出条件"
+    },
+    {
+      "path": "registry/capabilities.toml",
+      "purpose": "五维能力 implemented / missing 登记；verified 不由此推出"
+    },
+    {
+      "path": "registry/feasibility.toml",
+      "purpose": "实验目标是否成立；两类原理性阻塞不可被证据绕过"
+    },
+    {
+      "path": "registry/methodology.toml",
+      "purpose": "设计决策的一手论文依据与边界；论文分数不是本仓 expected"
+    },
+    {
+      "path": "registry/mllm_post_training.toml",
+      "purpose": "MLLM 后训练五方向、来源边界与 14 篇映射"
+    },
+    {
+      "path": "src/recipe_lab/*.py",
+      "purpose": "审计器、CLI 与任务适配代码；生成报告必须由这些代码重建"
+    },
+    {
+      "path": "tests/test_*.py",
+      "purpose": "离线正反向测试；通过不等于 GPU 验证"
+    }
+  ]
+}

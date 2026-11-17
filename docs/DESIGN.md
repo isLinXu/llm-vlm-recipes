@@ -412,6 +412,16 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 
 ---
 
+## ADR-026 — 新增 Agent 交接契约：人类可读入口与机器可复现清单同源
+
+- 背景：仓库已有五层审计和大量 Markdown，但新读者与编码 Agent 仍要自己拼出「先读什么、改哪些事实源、跑哪些命令、哪些门禁必须失败、哪些数字不能信」。口头说明会漂移，README 越写越长，Agent 也可能把生成报告当事实源或直接 push。
+- 决策一（双视图）：新增静态 `AGENTS.md`（Agent 可发现入口）、生成 `docs/AGENT-HANDOFF.md`（人类可读现状与工作流）和 `docs/AGENT-HANDOFF.json`（机器可读事实源、生成物哈希、命令契约与 Guardrails）。三者都由 `registry/agent_contract.toml` 约束；该注册表不是第六层审计，只聚合已有五层事实。
+- 决策二（可重建性优先）：`recipe-lab handoff --check` 用真实 CLI 把五份生成报告重建到临时目录并逐字节比较，任一报告与当前源码/注册表不一致即失败关闭。`docs/AGENT-HANDOFF.md/json` 自身由同一审计器生成，不引入时间戳或绝对路径，重复生成结果稳定。
+- 决策三（硬边界）：契约禁止手改 `docs/` 生成物；登记 `pass` 与 `fail_closed` 两类命令，`--min-*` 提升目标必须继续失败；Guardrails 明确不得把静态检查当 GPU 验证、不得绕过原理性阻塞、未得明确要求不得 push。禁止宣称模式扫描所有面向Agent的说明文字。
+- 验证与边界：`tests/test_agent_contract.py`（21 项）覆盖事实源存在、生成物哈希、命令枚举、失败关闭门禁登记、禁止宣称、重复 id、缺 `{out}` 占位、以及真实 CLI 重建一致性。`make ci` 接入 `agent-check`；`make report` 接入 `handoff --report`。本契约只提升可发现性与可复现性，不认证 GPU 执行、不解锁 B2/B3，也不替代任何一层审计。
+
+---
+
 ## recipe.toml 字段规范
 
 | 段 | 关键字段 | 必需性 | 相关规则 |

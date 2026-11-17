@@ -86,6 +86,11 @@
   实现状态从 `capabilities.toml` 重算，原理性阻塞篇标为无效覆盖证据。
   见 [MLLM-POST-TRAINING.md](MLLM-POST-TRAINING.md)。
 
+- **Agent 交接（ADR-026）**：`AGENTS.md`、`registry/agent_contract.toml` 与
+  `recipe-lab handoff` 把人类入口 `AGENT-HANDOFF.md` 与机器入口 `AGENT-HANDOFF.json`
+  绑定到同一事实源。生成报告必须由 CLI 重建，提升门禁保持失败关闭；
+  这不是第六层审计，也不把静态检查升级为 GPU 证据。
+
 `confidence` 字段目前 14 篇全为 `primary`；若后续引入社区 benchmark 数字，
 应显式降为 `secondary`。
 

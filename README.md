@@ -18,6 +18,7 @@
 | 原理上可作 baseline | **eligible 0/14**；pending_freeze 6、not_implemented 6、`blocked_zero_train` 1、`contaminated_pretraining` 1（见 `make feasibility-check`） |
 | 方法论依据 | 14 篇逐篇绑定 practice 论文一手结论：20 篇一手核实 / 3 篇未核实仅作补充、24 条主张、10 条编号更正（见 `make methodology-check`、`METHODOLOGY.md`）。论文依据不解锁 GPU 晋级 |
 | MLLM 后训练方向 | 第五层审计：按指令遵循 / 偏好校准 / 推理增强 / 领域自适应 / 可扩展学习五方向映射 14 篇；4/5 方向有五维实现支撑，偏好校准为缺口（见 `make post-training-check`、`MLLM-POST-TRAINING.md`） |
+| Agent 交接契约 | 人类读 `AGENTS.md` / `AGENT-HANDOFF.md`，Agent 读 `AGENT-HANDOFF.json`；生成物可重建且提升门禁失败关闭（见 `make agent-check`） |
 | 声明就绪状态 | B1 declared 14 篇；**research-ready B2+ 0 篇、business-ready B3 0 篇** |
 | 上游实验可复现性 | L0 8 / L1 6 / L2+ 0；没有确认任何篇达到完全锁定 |
 
@@ -72,10 +73,22 @@ make post-training-check                                        # 五方向闭�
 PYTHONPATH=src python3 -m recipe_lab post-training --min-fivedim-directions 5  # 当前必须失败
 ```
 
+为了让人类和 Agent 看到同一套事实，仓库另有 **Agent 交接契约**（ADR-026）：
+`AGENTS.md` 是短入口，`docs/AGENT-HANDOFF.md` 是人类可读现状与工作流，
+`docs/AGENT-HANDOFF.json` 是机器可读的事实源、生成物哈希、命令契约与 Guardrails。
+`recipe-lab handoff --check` 会用真实 CLI 把五份生成报告重建到临时目录并逐字节比较；
+任一侧漂移就失败关闭。它不认证 GPU 执行，也不解锁 B2/B3。
+
+```bash
+make agent-check            # 交接契约 + 生成物可重建性
+make agent-report           # 生成 AGENT-HANDOFF.md / .json
+```
+
 完整的14篇五维矩阵、各篇具体缺失、方法覆盖边界、wave0–wave6依赖和验收：
 **[BASELINE-READINESS.md](docs/BASELINE-READINESS.md)**。
 方法论依据与一手论文核查：**[METHODOLOGY.md](docs/METHODOLOGY.md)**。
 MLLM 后训练五方向与 14 篇映射：**[MLLM-POST-TRAINING.md](docs/MLLM-POST-TRAINING.md)**。
+Agent 交接：[AGENTS.md](AGENTS.md) · [AGENT-HANDOFF.md](docs/AGENT-HANDOFF.md) · [AGENT-HANDOFF.json](docs/AGENT-HANDOFF.json)。
 历史一手审计：**[REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)**。
 
 ## 快速验证（无 GPU、无训练依赖）
@@ -87,7 +100,8 @@ make ci                      # 结构/契约、审计完整性、能力矩阵、
 make capabilities-check      # 精确14篇覆盖、文件证据与合法能力状态
 make methodology-check       # 论文一手字段、引用闭合、边界声明与阻塞篇交叉校验
 make post-training-check     # MLLM 后训练五方向映射、来源边界与能力/可行性交叉
-make report                  # 重建 MATRIX / REPRODUCIBILITY / BASELINE-READINESS / METHODOLOGY / MLLM-POST-TRAINING
+make agent-check             # Agent 交接契约与生成物可重建性
+make report                  # 重建 MATRIX / REPRODUCIBILITY / BASELINE-READINESS / METHODOLOGY / MLLM-POST-TRAINING / AGENT-HANDOFF
 make baseline-dry-run        # 输出14篇声明；不运行训练，不产生实跑证据
 PYTHONPATH=src python3 -m recipe_lab capabilities --json
 ```
@@ -279,6 +293,7 @@ python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --dry-ru
 | 可行性判定 | 实验目标是否成立、数据是否污染？ | `feasibility.toml`，`feasibility` |
 | 方法论依据 | 这么设计依据哪篇论文的一手结论？ | `methodology.toml`，`methodology` |
 | MLLM 后训练方向 | 训练工作覆盖哪个能力方向、缺口在哪？ | `mllm_post_training.toml`，`post-training` |
+| Agent 交接契约 | 人与 Agent 如何从同一事实源复现？ | `agent_contract.toml`，`handoff` |
 
 `status`的cataloged→ported→smoke-passed→benchmarked只记录配方维护进展，不替代上述审计。
 复现上游实验与自建baseline可以不同，但后者必须公开声明差异并冻结、实测。
@@ -286,7 +301,7 @@ python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --dry-ru
 ## 关键目录
 
 ```text
-registry/                    taxonomy、reproducibility、baseline、capabilities、feasibility、methodology、mllm_post_training、一手evidence
+registry/                    taxonomy、reproducibility、baseline、capabilities、feasibility、methodology、mllm_post_training、agent_contract、一手evidence
 recipes/**/recipe.toml        14篇配方；所有来源与自建差异显式登记
 src/recipe_lab/               审计/CLI、plan、math_task、baseline_evidence、capabilities、feasibility、methodology
 runner/                      train / eval / zero_shot / lock / suite / export；说明见runner/README.md
@@ -297,6 +312,9 @@ scripts/                     一次性迁移、来源漂移辅助；重跑不能
 docs/BASELINE-READINESS.md   就绪、实际能力、缺口、实施依赖及验收（生成）
 docs/METHODOLOGY.md          逐篇方法论依据、一手论文核查与编号更正（生成）
 docs/MLLM-POST-TRAINING.md   MLLM 后训练五方向、来源边界与 14 篇映射（生成）
+docs/AGENT-HANDOFF.md        Agent 交接契约的人类可读视图（生成）
+docs/AGENT-HANDOFF.json      Agent 交接契约的机器可读清单（生成）
+AGENTS.md                    Agent 可发现入口与硬边界（静态）
 docs/REPRODUCIBILITY.md      历史上游可复现性审计（生成）
 docs/MATRIX.md               全量配方索引（生成）
 docs/DESIGN.md              架构决策、证据检查边界

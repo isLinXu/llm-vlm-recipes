@@ -1,0 +1,188 @@
+# Agent 交接契约：把「人读的文档」与「Agent 可重复执行的命令」绑定到同一事实源。
+# 这不是第六层审计；它只聚合现有五层，不新增晋级规则，也不认证 GPU 执行。
+
+schema = 1
+contract_version = "1.0.0"
+assessed_at = "2026-11-17"
+handoff_md = "docs/AGENT-HANDOFF.md"
+handoff_json = "docs/AGENT-HANDOFF.json"
+agent_instructions = "AGENTS.md"
+root_marker = "registry/taxonomy.toml"
+python_min = "3.11"
+entrypoint = "python3 -m recipe_lab"
+
+[integrity]
+forbidden_claim_phrases = [
+  "已在本仓 GPU 验证",
+  "全部 14 篇已可 baseline",
+  "达到 B2",
+  "达到 B3",
+]
+allowed_expectations = ["pass", "fail_closed"]
+
+# -------------------------------------------------------------------------
+# 唯一事实源：改这些文件，再重建生成物；不要手改 docs 下的生成报告。
+# -------------------------------------------------------------------------
+[[sources_of_truth]]
+path = "recipes/**/recipe.toml"
+purpose = "14 篇配方的单一事实源；训练/评估协议与内容身份只取任务专用段"
+
+[[sources_of_truth]]
+path = "registry/taxonomy.toml"
+purpose = "family / trainer / 兼容矩阵与仓库根标记"
+
+[[sources_of_truth]]
+path = "registry/reproducibility.toml"
+purpose = "上游可复现性 L0–L4 判定"
+
+[[sources_of_truth]]
+path = "registry/baseline.toml"
+purpose = "B0–B3 就绪规则与退出条件"
+
+[[sources_of_truth]]
+path = "registry/capabilities.toml"
+purpose = "五维能力 implemented / missing 登记；verified 不由此推出"
+
+[[sources_of_truth]]
+path = "registry/feasibility.toml"
+purpose = "实验目标是否成立；两类原理性阻塞不可被证据绕过"
+
+[[sources_of_truth]]
+path = "registry/methodology.toml"
+purpose = "设计决策的一手论文依据与边界；论文分数不是本仓 expected"
+
+[[sources_of_truth]]
+path = "registry/mllm_post_training.toml"
+purpose = "MLLM 后训练五方向、来源边界与 14 篇映射"
+
+[[sources_of_truth]]
+path = "src/recipe_lab/*.py"
+purpose = "审计器、CLI 与任务适配代码；生成报告必须由这些代码重建"
+
+[[sources_of_truth]]
+path = "tests/test_*.py"
+purpose = "离线正反向测试；通过不等于 GPU 验证"
+
+# -------------------------------------------------------------------------
+# 生成物：argv 是 recipe-lab 子命令参数，{out} 由校验器替换为临时路径。
+# -------------------------------------------------------------------------
+[[generated_artifacts]]
+path = "docs/MATRIX.md"
+argv = ["matrix", "--out", "{out}"]
+purpose = "全量 14 篇索引与五维矩阵"
+
+[[generated_artifacts]]
+path = "docs/REPRODUCIBILITY.md"
+argv = ["repro", "--report", "{out}"]
+purpose = "上游可复现性历史审计"
+
+[[generated_artifacts]]
+path = "docs/BASELINE-READINESS.md"
+argv = ["baseline", "--report", "{out}"]
+purpose = "B0–B3 就绪、能力矩阵与缺口"
+
+[[generated_artifacts]]
+path = "docs/METHODOLOGY.md"
+argv = ["methodology", "--report", "{out}"]
+purpose = "方法论依据、一手论文核查与编号更正"
+
+[[generated_artifacts]]
+path = "docs/MLLM-POST-TRAINING.md"
+argv = ["post-training", "--report", "{out}"]
+purpose = "MLLM 后训练五方向与逐篇映射"
+
+# -------------------------------------------------------------------------
+# 标准命令：expectation=pass 是日常门禁；fail_closed 是提升目标，必须保持失败。
+# -------------------------------------------------------------------------
+[[commands]]
+id = "doctor"
+argv = ["doctor"]
+expectation = "pass"
+purpose = "仓库根、tomllib、taxonomy 与 recipe.toml 可解析"
+
+[[commands]]
+id = "validate-l6"
+argv = ["validate", "--level", "l6"]
+expectation = "pass"
+purpose = "L0–L6 契约校验；warning 是登记的待办风险，不阻塞 CI"
+
+[[commands]]
+id = "ci"
+argv = ["make", "ci"]
+expectation = "pass"
+purpose = "doctor + L0–L6 + 单测 + 五层审计 + dry-run 冒烟"
+
+[[commands]]
+id = "report"
+argv = ["make", "report"]
+expectation = "pass"
+purpose = "重建五份生成报告；随后必须检查 git diff --exit-code"
+
+[[commands]]
+id = "handoff-check"
+argv = ["handoff", "--check"]
+expectation = "pass"
+purpose = "校验交接契约、生成物可重建性与门禁登记未漂移"
+
+[[commands]]
+id = "gate-b2"
+argv = ["baseline", "--check", "--min-state", "B2"]
+expectation = "fail_closed"
+purpose = "当前不得宣称任何篇达到 research-ready"
+
+[[commands]]
+id = "gate-b3"
+argv = ["baseline", "--check", "--min-state", "B3"]
+expectation = "fail_closed"
+purpose = "当前不得宣称任何篇达到 business-ready"
+
+[[commands]]
+id = "gate-l2"
+argv = ["repro", "--check", "--min-level", "L2"]
+expectation = "fail_closed"
+purpose = "当前不得宣称上游实验完全锁定"
+
+[[commands]]
+id = "gate-feasibility-b2"
+argv = ["feasibility", "--check", "--min-state", "B2"]
+expectation = "fail_closed"
+purpose = "当前不得把任何篇判为可直接晋级"
+
+[[commands]]
+id = "gate-methodology"
+argv = ["methodology", "--check", "--min-verified-papers", "99"]
+expectation = "fail_closed"
+purpose = "一手核实论文数量提升目标；当前 20/23"
+
+[[commands]]
+id = "gate-post-training"
+argv = ["post-training", "--check", "--min-fivedim-directions", "5"]
+expectation = "fail_closed"
+purpose = "方向覆盖提升目标；当前 4/5，偏好校准为缺口"
+
+# -------------------------------------------------------------------------
+# Agent 必须遵守的边界。
+# -------------------------------------------------------------------------
+[[guardrails]]
+id = "source-of-truth"
+statement = "先改 registry / src / recipes / tests，再运行 make report；不要手改 docs 下的生成报告。"
+
+[[guardrails]]
+id = "no-static-verification"
+statement = "静态 JSON、hash、测试通过和 dry-run 只证明内部一致性，不认证 GPU 执行，也不解锁 B2/B3。"
+
+[[guardrails]]
+id = "no-blocked-override"
+statement = "blocked_zero_train 与 contaminated_pretraining 是原理性阻塞；不得靠补证据或论文背书绕过。"
+
+[[guardrails]]
+id = "no-hidden-promotion"
+statement = "提升目标必须失败关闭；不得把 --min-* 目标改成当前值来制造绿灯。"
+
+[[guardrails]]
+id = "no-unasked-push"
+statement = "不要自行创建远端、push 或对外发布；只有用户明确要求时执行。"
+
+[[guardrails]]
+id = "source-boundary"
+statement = "MLLM 五方向只能引用 preprints 202607.1494 摘要级框架；arXiv 2503.06072 与 Awesome-MLLM-Tuning 只作交叉印证 / 方法索引。"
