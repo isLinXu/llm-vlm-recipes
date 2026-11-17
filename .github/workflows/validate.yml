@@ -1,0 +1,89 @@
+name: validate-recipes
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装测试依赖（核心工具链本身零依赖）
+        run: python -m pip install pytest
+
+      - name: CI 门禁（doctor + L0-L6 校验 + 单测 + 审计完整性/能力矩阵/可行性/方法论依据检查）
+        run: make ci
+
+      - name: 执行层与发布级 dry-run 冒烟（不装训练框架、不需要 GPU）
+        run: |
+          PYTHONPATH=src python3 runner/train.py --recipe llm/sft/starcoder1b-fim --dry-run --json
+          PYTHONPATH=src python3 runner/eval.py --recipe llm/sft/starcoder1b-fim --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe llm/sft/starcoder1b-fim --dry-run
+          PYTHONPATH=src python3 runner/suite.py --recipe llm/sft/starcoder1b-fim --seeds 42 43 44 --output-root "$PWD/runs/fim-suite-preview" --dry-run
+          PYTHONPATH=src python3 runner/export.py --recipe llm/sft/starcoder1b-fim --checkpoint "$PWD/runs/absent/fim-full" --evaluation "$PWD/runs/absent/fim-eval/evaluation.json" --output "$PWD/runs/fim-export-preview" --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe llm/sft/llama3-8b-xlam-function-calling --dry-run --json
+          PYTHONPATH=src python3 runner/eval.py --recipe llm/sft/llama3-8b-xlam-function-calling --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe llm/sft/llama3-8b-xlam-function-calling --dry-run
+          PYTHONPATH=src python3 runner/suite.py --recipe llm/sft/llama3-8b-xlam-function-calling --seeds 42 43 44 --output-root "$PWD/runs/xlam-suite-preview" --dry-run
+          PYTHONPATH=src python3 runner/export.py --recipe llm/sft/llama3-8b-xlam-function-calling --checkpoint "$PWD/runs/absent/xlam-full" --evaluation "$PWD/runs/absent/xlam-eval/evaluation.json" --output "$PWD/runs/xlam-export-preview" --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe llm/sft/rapidfire-multiconfig --dry-run --json
+          PYTHONPATH=src python3 runner/train.py --recipe llm/sft/rapidfire-multiconfig --config-id lr2e-4-r32 --dry-run --json
+          PYTHONPATH=src python3 runner/eval.py --recipe llm/sft/rapidfire-multiconfig --dry-run
+          PYTHONPATH=src python3 runner/eval.py --recipe llm/sft/rapidfire-multiconfig --eval-split validation --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe llm/sft/rapidfire-multiconfig --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe llm/sft/rapidfire-multiconfig --eval-split validation --dry-run
+          PYTHONPATH=src python3 runner/suite.py --recipe llm/sft/rapidfire-multiconfig --seeds 42 43 44 --output-root "$PWD/runs/rapidfire-suite-preview" --dry-run
+          PYTHONPATH=src python3 runner/export.py --recipe llm/sft/rapidfire-multiconfig --checkpoint "$PWD/runs/absent/rapidfire-full" --evaluation "$PWD/runs/absent/rapidfire-eval/evaluation.json" --output "$PWD/runs/rapidfire-export-preview" --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --dry-run --json
+          PYTHONPATH=src python3 runner/eval.py --recipe vlm/sft/granite-vision-line-comparison --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe vlm/sft/granite-vision-line-comparison --dry-run
+          PYTHONPATH=src python3 runner/suite.py --recipe vlm/sft/granite-vision-line-comparison --seeds 42 43 44 --output-root "$PWD/runs/granite-suite-preview" --dry-run
+          PYTHONPATH=src python3 runner/export.py --recipe vlm/sft/granite-vision-line-comparison --checkpoint "$PWD/runs/absent/granite-full" --evaluation "$PWD/runs/absent/granite-eval/evaluation.json" --output "$PWD/runs/granite-export-preview" --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe vlm/sft/paligemma2-refcoco-grounding --dry-run --json
+          PYTHONPATH=src python3 runner/eval.py --recipe vlm/sft/paligemma2-refcoco-grounding --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe vlm/sft/paligemma2-refcoco-grounding --dry-run
+          PYTHONPATH=src python3 runner/suite.py --recipe vlm/sft/paligemma2-refcoco-grounding --seeds 42 43 44 --output-root "$PWD/runs/paligemma-suite-preview" --dry-run
+          PYTHONPATH=src python3 runner/export.py --recipe vlm/sft/paligemma2-refcoco-grounding --checkpoint "$PWD/runs/absent/paligemma-full" --evaluation "$PWD/runs/absent/paligemma-eval/evaluation.json" --output "$PWD/runs/paligemma-export-preview" --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe llm/grpo/qwen2-0-5b-numinamath --dry-run
+          PYTHONPATH=src python3 runner/eval.py --recipe llm/grpo/qwen2-0-5b-numinamath --dry-run
+          PYTHONPATH=src python3 runner/zero_shot.py --recipe llm/grpo/qwen2-0-5b-numinamath --dry-run
+          PYTHONPATH=src python3 runner/train.py --recipe llm/grpo/qwen2-0-5b-numinamath --train-seed 43 --output-root "$PWD/runs/seed-preview" --dry-run --json
+          PYTHONPATH=src python3 runner/export.py --recipe llm/grpo/qwen2-0-5b-numinamath --checkpoint "$PWD/runs/absent/full" --evaluation "$PWD/runs/absent/eval/evaluation.json" --output "$PWD/runs/export-preview" --dry-run
+
+      - name: 检查四份生成物与配置同步
+        run: |
+          make report
+          git diff --exit-code -- docs/MATRIX.md docs/REPRODUCIBILITY.md docs/BASELINE-READINESS.md docs/METHODOLOGY.md
+
+      - name: 严格模式报告（不阻塞，供人工复核待办）
+        if: always()
+        run: make validate-strict || true
+
+      - name: 可复现性提升目标（不阻塞，展示与 L2 的差距）
+        if: always()
+        run: |
+          PYTHONPATH=src python3 -m recipe_lab repro --check --min-level L2 || true
+
+      - name: 基线提升目标（不阻塞，展示与 B2 的差距）
+        if: always()
+        run: |
+          PYTHONPATH=src python3 -m recipe_lab baseline --check --min-state B2 || true
+
+      - name: Baseline 可行性判定（0篇eligible、2篇原理性阻塞、6篇五维代码齐备，不阻塞但必须打印）
+        if: always()
+        run: |
+          PYTHONPATH=src python3 -m recipe_lab feasibility --check
+          PYTHONPATH=src python3 -m recipe_lab feasibility --check --min-state B2 || true
+
+      - name: 方法论依据审计（论文一手字段/引用闭合/边界声明；提升目标不阻塞）
+        if: always()
+        run: |
+          PYTHONPATH=src python3 -m recipe_lab methodology --check
+          PYTHONPATH=src python3 -m recipe_lab methodology --check --min-verified-papers 99 || true

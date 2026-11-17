@@ -1,0 +1,43 @@
+# 故意写错的 VLM recipe：用于验证规则确实会拦住契约违规。
+# 期望触发 R105 / R107 / R108 / R109 / R110。
+schema = 1
+id = "vlm/sft/bad-vlm-contract"
+name = "反面样例：违反 VLM 数据契约"
+status = "ported"
+coverage = "params"
+confidence = "primary"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_trl"
+
+[method]
+family = "sft"
+trainer = "SFTTrainer"
+
+[model]
+base = "example/vlm"
+modality = "vlm"
+
+[dataset]
+name = "example/data"
+structure = "standard"
+type = "prompt-completion"
+has_images = true
+
+[modality_contract]
+images_column = "messages[0].content"
+content_list_dict = false
+processing_class = "tokenizer"
+max_length = 1024
+
+[baseline]
+zero_train = true
+result = "fails"
+
+[evaluation]
+metrics = ["exact_match"]
+held_out = true
+seed = 42
+multi_run = true
+
+[budget]
+smoke_steps = 5
+full_steps = 100

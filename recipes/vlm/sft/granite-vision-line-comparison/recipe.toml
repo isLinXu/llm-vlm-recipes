@@ -1,0 +1,240 @@
+# wave3 首篇。这是「我们维护的修正版配方」，不是上游 notebook 的原样抄录。
+# 2026-11-14 回 HF Cookbook fine_tuning_granite_vision_sft_trl 一手页面核清事实：
+# 上游只做 50/50 train/test、无 validation；collator 按 <|assistant|> 位置隐式 mask、
+# 没有显式 image_token_id 屏蔽；无 revision / 训练 seed / compute_metrics；
+# 评估仅 test_idx=20 单样本定性生成；正文写 ChartQA 但代码从未加载 ChartQA；
+# 说 merge adapters 却只有 PeftModel.from_pretrained；use_dora=True 而标题写 LoRA。
+# 差异逐条保留在 [upstream] 与 registry/evidence.toml [granite_vision_audit]。
+
+schema = 1
+id = "vlm/sft/granite-vision-line-comparison"
+name = "Granite Vision 3.1 2B：Geoperception LineComparison 自建 VLM SFT"
+status = "cataloged"
+coverage = "params"
+confidence = "primary"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_granite_vision_sft_trl"
+source_sha = ""
+report_section = "04"
+tags = ["vlm", "sft", "custom-collator", "loss-mask", "image-hash-split"]
+
+[method]
+family = "sft"
+trainer = "Trainer"
+upstream_trainer = "SFTTrainer"
+peft = "qlora-dora"
+loss = "cross-entropy"
+
+[model]
+base = "ibm-granite/granite-vision-3.1-2b-preview"
+params_b = 2.0
+modality = "vlm"
+revision = ""
+
+[dataset]
+name = "euclid-multimodal/Geoperception"
+structure = "conversational"
+type = "prompt-completion"
+kind = "static"
+has_images = true
+revision = ""
+
+[modality_contract]
+images_column = "image"
+content_list_dict = true
+processing_class = "processor"
+max_length = "none"
+image_mode = "RGB"
+vision_tower = "skipped_from_quantization"
+
+[granite]
+protocol = "granite-linecomparison-v1"
+base_experiment_id = "vlm-sft-granite-vision-line-comparison-v1"
+source_split = "train"
+predicate_filter = "LineComparison"
+columns = ["answer", "image", "predicate", "question"]
+split_percent = [80, 10, 10]
+split_algorithm = "sha256_json({image_sha256,data_seed,protocol}) modulo 100；同图所有问答变体同 split"
+image_hash = "原始图像 mode + tobytes() 的 SHA256；不做 RGB 转换后再 hash，避免模式/元数据漂移"
+duplicate_policy = "全局拒绝规范化(question,answer)内容重复；图像 hash 决定 split，禁止同图跨 split 泄漏"
+normalization = "内容原文保留；去重用 NFKC + casefold + 空白折叠；不 strip 训练文本"
+loss = "双层 mask：显式 image_token_id 与 assistant span 外 token label=-100；assistant 回答 + EOS 计 loss"
+prompt_format = "system + user(image+question)；gold 不进生成 prompt"
+target_format = "assistant 回答 + EOS"
+chat_template = "processor.apply_chat_template 分别生成 prompt(add_generation_prompt=True) 与完整序列；token 级前缀必须完全一致"
+image_inputs = "[[image]] 嵌套；非 RGB 显式 convert('RGB')；pixel_values 形状必须全批一致"
+metric_definition = "exact_match 保留原文全串相等；normalized_exact_match = NFKC+casefold+空白折叠后相等；不解释几何语义、不等于人工判分或业务验收"
+generation_truncation = "首个 EOS 之后的内容丢弃，再 strip；空生成不得给分"
+max_eval_examples = 300
+max_validation_examples = 300
+processor_revision_policy = "AutoProcessor.from_pretrained(base, revision=model.revision)；processor identity 入证据"
+upstream_quantitative_evaluation = false
+upstream_split = "train_test_split(test_size=0.5, seed=42)，无 validation"
+upstream_mask = "按 assistant span 位置隐式屏蔽；无显式 image_token_id mask"
+concurrent_scheduling = false
+
+[upstream]
+split = "dataset['train'].filter(predicate=='LineComparison').train_test_split(test_size=0.5, seed=42)；无 validation"
+mask = "labels=input_ids.clone()，按 <|assistant|> token 序列启停，遇 <|end_of_text|> 停；无显式 image_token_id 屏蔽"
+evaluation = "训练前后只对 test_idx=20 做单样本定性生成；无 eval_dataset / compute_metrics / 任何指标数值"
+revision = "load_dataset / AutoModelForVision2Seq / AutoProcessor 均未传 revision"
+seed = "train_test_split 用了 seed=42；SFTConfig 无 seed / data_seed / deterministic"
+merge = "文字称 merge the LORA adapters，代码只有 PeftModel.from_pretrained(model, output_dir)，没有 merge_and_unload()"
+chatqa_text_code_mismatch = "第 5 节文字写用 ChartQA 测试，代码实际仍用 Geoperception 切出的 test_dataset，从未加载 ChartQA"
+attn_implementation = "页面输出 FlashAttention is not installed；USE_FLASH_ATTENTION=False，实际 _attn_implementation=None"
+target_modules = "LoraConfig target_modules 为动态表达式筛名称含 language_model 且含 _proj 的模块；页面未给解析后的列表"
+trainer = "SFTTrainer + dataset_kwargs={'skip_prepare_dataset': True} + remove_unused_columns=False + dataset_text_field=''"
+processing_class = "SFTTrainer(processing_class=processor.tokenizer)，而自定义 collate_fn 内部用完整 processor 处理图文"
+
+[peft]
+r = 8
+alpha = 8
+dropout = 0.1
+target_module_patterns = ["language_model", "_proj"]
+use_dora = true
+init_lora_weights = "gaussian"
+bias = "none"
+task_type = "CAUSAL_LM"
+
+[quantization]
+load_in_4bit = true
+bnb_4bit_quant_type = "nf4"
+bnb_4bit_use_double_quant = true
+bnb_4bit_compute_dtype = "bfloat16"
+llm_int8_skip_modules = ["vision_tower", "lm_head"]
+llm_int8_enable_fp32_cpu_offload = true
+
+[train]
+seed = 42
+data_seed = 42
+seed_mechanism = "上游只有 train_test_split(seed=42)，训练 config 无 seed；本仓显式声明训练/数据/评估 seed"
+learning_rate = 1e-4
+lr_scheduler_type = "linear"
+weight_decay = 0.01
+warmup_steps = 10
+per_device_train_batch_size = 4
+per_device_eval_batch_size = 4
+gradient_accumulation_steps = 2
+max_steps = 150
+seq_length = 512
+fp16 = false
+bf16 = true
+optim = "adamw_torch_fused"
+gradient_checkpointing = true
+dataloader_num_workers = 0
+remove_unused_columns = false
+eval_steps = 10
+save_steps = 10
+logging_steps = 10
+
+[evaluation]
+metrics = ["exact_match", "normalized_exact_match"]
+split = "image-hash 80/10/10；validation 用于配置选择，test 仅最终验收一次"
+seed = 42
+max_new_tokens = 64
+held_out = true
+multi_run = true
+compute_metrics = true
+
+[budget]
+smoke_steps = 5
+full_steps = 150
+
+# 刻意不填版本：上游为 git+transformers 源码 + -U 安装，没有任何可重放的版本信息。
+# 填一个「测试过」的版本等于编造。真实版本须由 runner/lock.py --capture-environment 冻结。
+[dependencies]
+
+[baseline]
+zero_train = true
+result = "unmeasured"
+
+[known_issues]
+items = [
+  "上游 collator 没有显式 image_token_id mask，image placeholder 只因位于 assistant 之前才被屏蔽",
+  "上游只做 50/50 切分且无 validation，无法做配置选择或独立最终验收",
+  "上游从未报告任何数值；所谓评估是 test_idx=20 单样本定性生成",
+  "页面文字与代码不一致：写 ChartQA 未加载、说 merge 无 merge_and_unload、标题写 LoRA 实际 use_dora=True",
+  "上游依赖为 git+ 源码 -U 安装，无 commit、无版本，无法重放",
+]
+
+[upstream_deviations]
+items = [
+  "用普通 transformers.Trainer + 自建 collator，不复用 SFTTrainer 的 skip_prepare_dataset 隐式行为",
+  "图像原始 bytes 的 SHA256 做 80/10/10 隔离，同图所有问答变体同 split，规范化内容全局去重",
+  "prompt/full 两次 processor 编码做 token 级前缀校验，再叠加显式 image_token_id 的第二层 -100 mask",
+  "冻结 model/dataset/processor revision、训练/数据/评估 seed、processor identity 与 LoRA 动态命中集合",
+  "held-out 逐题 greedy + 首个 EOS 截断 + exact_match / normalized_exact_match 重算，不解释几何语义",
+]
+
+[todo]
+items = [
+  "锁定真实 model/dataset/source revision 与可安装镜像（当前刻意留空）",
+  "发布级 comparison / export 两维：三独立训练 seed 聚合与选中 adapter 的 HF offline 复载",
+  "确认 Geoperception / granite-vision 基座许可与商业使用、再分发权限",
+  "真实 CUDA 实跑三 seed、预声明 expected/tolerance/export_tolerance 后再独立验收",
+]
+
+# --- reproducibility audit (generated by scripts/apply_repro_audit.py) ---
+[repro]
+level = "L0"
+assessed_at = "2026-11-13"
+assessed_by = "hand-audit + primary-source-check"
+evidence_ref = "local-notebook:fine_tuning_granite_vision_sft_trl.txt"
+evidence = ""
+note = "本轮 2026-11-14 回一手页面复核；自建协议不冒充上游复现"
+
+[repro.code]
+state = "missing"
+gap = "上游为 .ipynb；本仓库已有 granite_task.py 自建执行层，不等于能重放上游 notebook"
+[repro.env]
+state = "missing"
+gap = "上游为 git+transformers 源码 + -U 安装，无任何版本信息"
+[repro.model]
+state = "declared"
+gap = "repo id 已按一手材料核实，但 from_pretrained 未传 revision"
+[repro.data]
+state = "declared"
+gap = "repo id 已按一手材料核实，但 load_dataset 未传 revision"
+[repro.params]
+state = "declared"
+gap = "SFTConfig / LoraConfig / BitsAndBytesConfig 已按一手页面补齐"
+[repro.seed]
+state = "missing"
+gap = "训练 config 无 seed / data_seed / deterministic"
+[repro.eval]
+state = "missing"
+gap = "原文无 eval_dataset / compute_metrics"
+[repro.provenance]
+state = "declared"
+gap = "有上游 HTTPS URL，但 source_sha 为空，notebook 漂移无法定位"
+
+[execution]
+command = "python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --full"
+entrypoint = "../../../../runner/train.py"
+task_id = "granite-linecomparison-v1"
+lockfile = "../../../../runner/locks/vlm__sft__granite-vision-line-comparison.lock.toml"
+eval_script = "../../../../runner/eval.py"
+zero_shot_script = "../../../../runner/zero_shot.py"
+evidence = "evidence/run.json"
+adapter_status = "implemented-unverified：五维代码与隔离离线测试齐备（图像内容 hash 隔离、显式 image token + assistant-only 双层 mask、Trainer 自建 collator、逐题 exact_match 重算；granite_suite 三 seed 逐题内容重算与 Student-t95 聚合；granite_export 的 DoRA/4bit adapter-only 包与 HF offline 新进程复载），task_router 已按精确 recipe_id 注册 granite-linecomparison-v1，C306/C307/C405 按任务分派不借用其他协议；全部只有 macOS ARM 离线合成证据，无 GPU 实跑、无 completed 证据、未冻结 revision、未预声明 export_tolerance（--full 导出失败关闭）、依赖/许可未确认，B1 不晋级"
+
+# --- baseline contract (generated by scripts/apply_baseline_contract.py) ---
+[baseline_contract]
+state = "B1"
+target_tier = "research"
+experiment_id = "vlm-sft-granite-vision-line-comparison-v1"
+revision_policy = "runner/lock.py --apply@有网环境；锁定时写入 source_sha / model.revision / dataset.revision；本机无外网，当前刻意留空"
+determinism = "torch.use_deterministic_algorithms(True, warn_only=True); cudnn.deterministic=True; cudnn.benchmark=False; tf32=disabled; CUBLAS_WORKSPACE_CONFIG=:4096:8"
+python_cuda = "python>=3.11,<3.14; torch CUDA build; CUDA 12.x（约束声明，实测版本由 runner/lock.py --apply 写入 lock 文件）"
+single_variable = "所有可变超参集中在 [train]；runner 内禁止硬编码；对照实验只改 [train] 一处并保留 diff"
+seed_origin = "seed 为本仓库定义 baseline 时声明，上游训练 config 无 seed"
+
+[resources]
+gpu = "待实跑确认（上游仅称 tested using a A100 GPU，未给显存数值）"
+note = "B3 业务档需要实测卡时与显存；此处为预估值，不作为验收依据"
+
+[methodology]
+registry = "registry/methodology.toml"
+principles = ["dora_decomposition", "qlora_fourbit", "completion_only_loss", "image_level_split", "qualitative_only_gap"]
+primary_papers = ["dora", "qlora", "lora"]
+supplement_papers = ["dedup_training_data"]
+stance = "DoRA/QLoRA 装配有论文依据；双层 mask、同图 hash 隔离、逐题重算是修正 Cookbook 的自建协议。上游文字写 LoRA 而配置为 use_dora=True，已按一手代码登记。"

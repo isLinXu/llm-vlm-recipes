@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recipe-lab"
+version = "0.1.0"
+description = "配置驱动的 LLM / VLM 训练 recipe 登记、契约校验与可复现验证工具链"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# 仓库许可为 MIT（见 LICENSE）；模型 / 数据许可另行逐项确认。
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+yaml = ["PyYAML>=6"]
+
+[project.scripts]
+recipe-lab = "recipe_lab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

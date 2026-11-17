@@ -1,0 +1,260 @@
+# wave3 第二篇 VLM。这是「我们维护的修正版配方」，不是上游 notebook 的原样抄录。
+# 2026-11-16 回 HF Cookbook fine_tuning_vlm_object_detection_grounding 一手页面核清事实：
+#   * base 为 google/paligemma2-3b-pt-448（pt，非 instruct），processor 用
+#     PaliGemmaProcessor.from_pretrained(model_id, use_fast=True)；推理 processor 仍从 base 加载。
+#   * 数据 load_dataset("jxu124/refcoco", split="train[:5%]")；图像来自 raw_image_info 里的
+#     Flickr URL 动态下载、失败过滤；captions 被拆成「一 caption 一样本」，最终列 image/bbox/caption。
+#   * 正文写「bboxes follow a xyxy format」，但训练增强 A.BboxParams(format="coco") 与
+#     coco_to_xyxy() 都按 COCO xywh 输入处理；可视化又把 dataset bbox 直接当 xyxy 喂给
+#     sv.Detections。格式表述与实现不一致，本仓以代码事实 coco_xywh 为 IO 输入并显式转换。
+#   * <loc####> 是 1024 桶、4 位数字，顺序 y1,x1,y2,x2，后接类别名，多条用 " ; " 分隔；
+#     页面没有 <seg###>，没有 segmentation 编解码。
+#   * 训练 collator prompt "<image>Detect {caption}."（大写+句号+processor suffix），
+#     训练/验证推理 prompt "<image>detect {caption}"（小写+无句号），三处不一致；
+#     format_objects 用 example["caption"][0] 而 collator 用整个 sample['caption']。
+#   * 训练 labels=input_ids.clone()，只 mask pad 与 <image> token，**prompt 也计 loss**；
+#     本仓改为 prompt/full 两次 processor 编码 + token 级前缀校验 + completion-only 双层 mask。
+#   * SFTConfig 有 eval_dataset / eval_strategy=steps，但全篇没有 compute_metrics、IoU、
+#     accuracy 或任何数值；所谓评估是 train[20] 与 val[13] 的单样本定性生成 + 可视化。
+#     pretrained do_sample=False，fine-tuned do_sample=True 且无 generation seed。
+#   * 上游图像来自 Flickr URL 运行时下载、resize 到 448 且在线增强；本仓要求冻结的
+#     静态图像与显式原图 width/height，不做在线 resize/augmentation 坐标变换。
+#   * 无 revision / 训练 seed / model seed；pip install -Uq 无版本；gated model + token；
+#     A100；页面未给 model/dataset/COCO/Flickr 许可或商业使用条款。
+# 差异逐条保留在 [upstream] 与 registry/evidence.toml [paligemma_grounding_audit]。
+
+schema = 1
+id = "vlm/sft/paligemma2-refcoco-grounding"
+name = "PaliGemma2 3B：RefCOCO grounding 自建 VLM SFT（单框 bbox IoU）"
+status = "cataloged"
+coverage = "params"
+confidence = "primary"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_object_detection_grounding"
+source_sha = ""
+report_section = "04"
+tags = ["vlm", "sft", "grounding", "bbox", "loc-token", "image-hash-split"]
+
+[method]
+family = "sft"
+trainer = "Trainer"
+upstream_trainer = "SFTTrainer"
+peft = "lora"
+loss = "cross-entropy"
+
+[model]
+base = "google/paligemma2-3b-pt-448"
+params_b = 3.0
+modality = "vlm"
+revision = ""
+
+[dataset]
+name = "jxu124/refcoco"
+structure = "conversational"
+type = "prompt-completion"
+kind = "static"
+has_images = true
+revision = ""
+
+[modality_contract]
+images_column = "image"
+content_list_dict = true
+processing_class = "processor"
+max_length = "none"
+image_mode = "RGB"
+vision_tower = "not_quantized"
+
+# 自建协议常量：全部机器可判定，改一个字段都会让 require_supported 失败关闭。
+[paligemma]
+protocol = "paligemma-grounding-v1"
+base_experiment_id = "vlm-sft-paligemma2-refcoco-grounding-v1"
+source_split = "train"
+columns = ["bbox", "caption", "height", "image", "width"]
+split_percent = [80, 10, 10]
+split_algorithm = "sha256_json({image_sha256,data_seed,protocol}) modulo 100；同图所有 caption 变体同 split"
+image_hash = "原始图像 mode + tobytes() 的 SHA256"
+duplicate_policy = "全局拒绝规范化(caption,bbox)内容重复；图像 hash 决定 split"
+normalization = "NFKC+casefold+空白折叠用于去重；训练文本保留原文"
+bbox_source_format = "coco_xywh"
+bbox_internal_format = "xyxy"
+location_bins = 1024
+location_token_order = "y1,x1,y2,x2"
+location_token_format = "<loc{v:04}>"
+detection_format = "<loc####><loc####><loc####><loc####> {caption}"
+prompt_format = "<image>Detect {caption}."
+target_format = "<loc####><loc####><loc####><loc####> {caption} + EOS"
+loss = "双层 mask：显式 image_token_id 与 prompt span 外 token label=-100；只对 suffix+EOS 计 loss"
+image_inputs = "[[image]] 嵌套；非 RGB 显式 convert('RGB')；pixel_values 形状必须全批一致"
+metric_definition = "bbox_iou / iou_at_0_5 / parse_rate / exact_match；只衡量单框定位一致性，不等于 mAP/AP/人工判分或业务验收"
+generation_truncation = "首个 EOS 之后的内容丢弃，再 strip；空生成与非单框解析不得给分"
+round_trip_min_iou = 0.98
+max_eval_examples = 300
+max_validation_examples = 300
+processor_revision_policy = "PaliGemmaProcessor.from_pretrained(base, revision=model.revision, use_fast=True)；processor identity 入证据"
+upstream_quantitative_evaluation = false
+upstream_split = "train_test_split(test_size=0.2, seed=42, shuffle=False)"
+upstream_prompt_mismatch = "训练 '<image>Detect {caption}.' / 推理 '<image>detect {caption}'；大小写、标点、suffix 三处不一致"
+online_augmentation = false
+
+[upstream]
+dataset = "load_dataset('jxu124/refcoco', split='train[:5%]')；Flickr URL 动态下载图像并过滤失败样本；captions 拆成单 caption 样本"
+bbox_format_mismatch = "正文写 bbox 为 xyxy，训练增强用 A.BboxParams(format='coco') 且 coco_to_xyxy() 按 xywh 输入；可视化又把 dataset bbox 当 xyxy"
+loc_tokens = "convert_to_detection_string 用 int(round(value*1024/max_value)) 生成 <loc####>，顺序 y1,x1,y2,x2；parse_paligemma_labels 以 /1024*width/height 反解；无 <seg###>"
+prompt_mismatch = "collate_fn 训练 prompt '<image>Detect {caption}.'；pretrained/fine-tuned 推理 '<image>detect {caption}'；format_objects 取 caption[0] 而 collator 用整个 caption"
+label_mask = "labels=input_ids.clone()，只把 pad_token_id 与 <image> token 置 -100；prompt 部分也参与损失"
+evaluation = "SFTConfig 有 eval_dataset/eval_steps，但无 compute_metrics 与任何数值；只有 train[20]、val[13] 单样本定性生成与可视化"
+generation = "pretrained do_sample=False；fine-tuned do_sample=True 且无 generation seed；两者 max_new_tokens=100、skip_special_tokens=True"
+trainer = "SFTTrainer + dataset_kwargs={'skip_prepare_dataset': True} + remove_unused_columns=False + label_names=['labels']"
+peft = "LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05, bias='none', task_type='CAUSAL_LM')；target_modules 含 'linear'；无量化、无 DoRA"
+revision = "from_pretrained / load_dataset 均未传 revision；SFTConfig 无 seed / data_seed / deterministic"
+install = "!pip install -Uq transformers datasets trl supervision albumentations；无版本，peft/torch/hub 为隐式依赖"
+license = "页面只提 gated models / access token / A100；未给 model/dataset/COCO/Flickr 许可或商业使用条款"
+
+[peft]
+r = 8
+alpha = 16
+dropout = 0.05
+target_modules = ["q_proj", "v_proj", "fc1", "fc2", "linear", "gate_proj", "up_proj", "down_proj"]
+use_dora = false
+init_lora_weights = "gaussian"
+bias = "none"
+task_type = "CAUSAL_LM"
+
+# 上游与本仓都不做 4bit 量化；显式声明而非省略，让 fingerprint 绑定该事实。
+[quantization]
+mode = "none"
+
+[train]
+seed = 42
+data_seed = 42
+seed_mechanism = "上游只有 train_test_split(seed=42)，训练 config 无 seed；本仓显式声明训练/数据/评估 seed"
+learning_rate = 1e-5
+lr_scheduler_type = "linear"
+weight_decay = 0.01
+warmup_steps = 10
+per_device_train_batch_size = 2
+per_device_eval_batch_size = 2
+gradient_accumulation_steps = 4
+max_steps = 150
+seq_length = 512
+fp16 = false
+bf16 = true
+optim = "adamw_torch_fused"
+gradient_checkpointing = false
+dataloader_num_workers = 0
+remove_unused_columns = false
+eval_steps = 10
+save_steps = 10
+logging_steps = 10
+
+[evaluation]
+metrics = ["bbox_iou", "iou_at_0_5", "parse_rate", "exact_match"]
+split = "image-hash 80/10/10；validation 用于配置选择，test 仅最终验收一次"
+seed = 42
+# 4 个 <loc####> 共 36 字符 + referring expression；64 会截断 caption、让 exact_match 恒为 0。
+max_new_tokens = 96
+held_out = true
+multi_run = true
+compute_metrics = true
+
+[budget]
+smoke_steps = 5
+full_steps = 150
+
+# 刻意不填版本：上游为 -U 安装，没有任何可重放的版本信息。填一个「测试过」的版本等于编造。
+[dependencies]
+
+[baseline]
+zero_train = true
+result = "unmeasured"
+
+[known_issues]
+items = [
+  "训练/推理 prompt 大小写、标点、suffix 三处不一致；上游 collator 与 format_objects 对 caption 字段用法也不同",
+  "bbox 格式在正文 xyxy 与训练代码 coco_xywh 之间反复横跳，可视化又直接当 xyxy",
+  "上游图像来自 Flickr URL 运行时下载并 resize，输入无法冻结且与 bbox 坐标耦合",
+  "上游 labels 只 mask pad 与 image token，prompt 也计 loss；从未报告 IoU 或任何定量指标",
+  "上游依赖无版本、无 revision、无训练 seed、gated model 且许可未说明",
+]
+
+[upstream_deviations]
+items = [
+  "统一训练/推理 prompt 为单一常量 '<image>Detect {caption}.'，两侧共同引用",
+  "bbox 内部统一 xyxy，只在 IO 边界做 coco_xywh→xyxy 转换，并强制 loc round-trip IoU 校验",
+  "图像原始 bytes SHA256 的 80/10/10 同图隔离，规范化(caption,bbox)全局去重，拒绝空 split",
+  "processor 两次编码（prompt / prompt+suffix）做 token 级前缀校验，显式 image_token_id + completion-only 双层 -100 mask",
+  "冻结 model/dataset/processor revision、训练/数据/评估 seed、静态 width/height 与 LoRA target 列表",
+  "held-out 逐题 greedy + 首个 EOS 截断 + IoU/parse_rate/exact_match 重算；单框协议，不冒充上游多目标检测或 mAP",
+]
+
+[todo]
+items = [
+  "锁定真实 model/dataset/source revision 与可安装镜像（当前刻意留空）",
+  "确认 RefCOCO / COCO / Flickr 图像与 PaliGemma2 基座许可、商业使用与再分发权限",
+  "真实 CUDA 实跑三 seed、预声明 expected/tolerance/export_tolerance 后再独立验收",
+]
+
+# --- reproducibility audit ---
+[repro]
+level = "L0"
+assessed_at = "2026-11-13"
+assessed_by = "hand-audit + primary-source-check"
+evidence_ref = "webfetch:fine_tuning_vlm_object_detection_grounding"
+evidence = ""
+note = "本轮 2026-11-16 回一手页面复核；自建协议不冒充上游复现"
+
+[repro.code]
+state = "missing"
+gap = "上游为 .ipynb；本仓库已有 paligemma_task.py 自建执行层，不等于能重放上游 notebook"
+[repro.env]
+state = "missing"
+gap = "pip install -Uq transformers datasets trl supervision albumentations，无任何版本"
+[repro.model]
+state = "declared"
+gap = "repo id 已按一手材料核实，但 from_pretrained 未传 revision"
+[repro.data]
+state = "declared"
+gap = "repo id 已按一手材料核实，但 load_dataset 未传 revision；图像来自运行时 Flickr 下载"
+[repro.params]
+state = "declared"
+gap = "SFTConfig / LoraConfig 已按上游页面补齐"
+[repro.seed]
+state = "missing"
+gap = "训练 config 无 seed / data_seed / deterministic；fine-tuned 推理 do_sample=True 无 seed"
+[repro.eval]
+state = "missing"
+gap = "有 eval_dataset 但全篇无 compute_metrics 与任何数值"
+[repro.provenance]
+state = "declared"
+gap = "有上游 HTTPS URL，但 source_sha 为空，notebook 漂移无法定位"
+
+[execution]
+command = "python3 runner/train.py --recipe vlm/sft/paligemma2-refcoco-grounding --full"
+entrypoint = "../../../../runner/train.py"
+task_id = "paligemma-grounding-v1"
+lockfile = "../../../../runner/locks/vlm__sft__paligemma2-refcoco-grounding.lock.toml"
+eval_script = "../../../../runner/eval.py"
+zero_shot_script = "../../../../runner/zero_shot.py"
+evidence = "evidence/run.json"
+adapter_status = "implemented-unverified：五维代码与隔离离线测试齐备（图像 hash 隔离、coco_xywh↔xyxy↔1024桶 loc round-trip、统一 prompt 模板、completion-only 双层 mask、逐题 IoU 重算；paligemma_suite 三 seed 聚合；paligemma_export LoRA adapter-only 包与 HF offline 新进程复载），task_router 按精确 recipe_id 注册；全部只有 macOS ARM 离线合成证据，无 GPU 实跑、无 completed 证据、未冻结 revision、未预声明 export_tolerance（--full 导出失败关闭）、数据/基座许可未确认，B1 不晋级"
+
+# --- baseline contract ---
+[baseline_contract]
+state = "B1"
+target_tier = "research"
+experiment_id = "vlm-sft-paligemma2-refcoco-grounding-v1"
+revision_policy = "runner/lock.py --apply@有网环境；锁定时写入 source_sha / model.revision / dataset.revision；本机无外网，当前刻意留空"
+determinism = "torch.use_deterministic_algorithms(True, warn_only=True); cudnn.deterministic=True; cudnn.benchmark=False; tf32=disabled; CUBLAS_WORKSPACE_CONFIG=:4096:8"
+python_cuda = "python>=3.11,<3.14; torch CUDA build; CUDA 12.x（约束声明，实测版本由 runner/lock.py --apply 写入 lock 文件）"
+single_variable = "所有可变超参集中在 [train]；runner 内禁止硬编码；对照实验只改 [train] 一处并保留 diff"
+seed_origin = "seed 为本仓库定义 baseline 时声明，上游训练 config 无 seed"
+
+[resources]
+gpu = "待实跑确认（上游称 Colab A100，未给显存数值）"
+note = "B3 业务档需要实测卡时与显存；此处为预估值，不作为验收依据"
+
+[methodology]
+registry = "registry/methodology.toml"
+principles = ["single_box_iou_loc", "completion_only_loss", "image_level_split", "qualitative_only_gap"]
+primary_papers = ["paligemma", "paligemma2", "qwen25vl"]
+supplement_papers = ["lora", "dedup_training_data", "qlora", "referit_refcoco"]
+stance = "PaliGemma/2 论文只支持模型与迁移定位，loc 1024 桶与 COCO xywh 来自 Cookbook 一手代码；本仓统一 prompt、双层 mask、单框 IoU 为自建修正，RefCOCO 一手来源未核到。"

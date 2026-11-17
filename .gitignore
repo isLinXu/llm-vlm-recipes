@@ -221,3 +221,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- synced from workspace repo ---
+*.py[cod]
+.venv/
+.pytest-tmp/
+# 本地运行结果，不入库（MATRIX.md 由 CI 生成并入库）
+.runs/
+runs/
+.DS_Store

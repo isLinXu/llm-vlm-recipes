@@ -1,0 +1,643 @@
+# 方法论依据层：回答第四個问题——「这么设计，依据哪篇 practice 论文的一手结论」。
+#
+# 与另外三层审计互不替代，也都不解锁 GPU 晋级：
+#   - capabilities.toml：代码 + offline test 是否实装（能不能跑起来）；
+#   - baseline.toml / baseline_evidence.py：证据与就绪度（有没有真实跑过）；
+#   - feasibility.toml：实验目标是否成立（值不值得当 baseline）；
+#   - 本文件：设计决策的文献依据（为什么这么设计、边界在哪、论文没证明什么）。
+#
+# 铁律（由 src/recipe_lab/methodology.py 强制）：
+#   1. 每条 paper 必须有一手摘要页核查；verified=true 需 arxiv_id/title/year/core_claim/boundary 齐全。
+#   2. verified=false 的论文只能进 supplement_papers，不能作为 principle 的 paper 直接支持主张。
+#   3. 论文的 benchmark 数字不得写成本仓 evaluation.expected/tolerance；本仓只声明设计依据。
+#   4. 14 篇精确覆盖；每篇必须有立场说明和至少一条方法论主张。
+#   5. 一手核查中发现的编号误用必须登记到 [[corrections]]，was != now。
+#   6. 原理性阻塞篇（blocked_zero_train / contaminated_pretraining）必须显式引用对应的
+#      chartqa 方法论主张来论证「为什么不Train」，不得靠论文背书冒充可晋级。
+
+schema = 1
+assessed_at = "2026-11-17"
+expected_recipe_count = 14
+title = "方法论依据登记（practice papers）"
+
+[integrity]
+# 禁止出现在任何 claim / boundary / stance 中的宣称模式：论文依据不等于本仓实测。
+forbidden_claim_phrases = [
+  "已在本仓 GPU 验证", "已在 CUDA 实跑", "GPU verified", "达到 B2", "达到 B3",
+  "eligible", "本仓 expected =", "本仓 tolerance =", "复现了论文分数",
+]
+supports = ["paper_supports", "we_adapted", "paper_limited"]
+scopes = ["design_guidance", "upstream_finding", "evaluation_guidance"]
+
+# ---------------------------------------------------------------------------
+# 一手核查过的论文库。core_claim 只写摘要页明确陈述的结论；boundary 写论文
+# 没有证明、或本仓不适用的部分（缺一项即视为未核查，verified 必须 false）。
+# ---------------------------------------------------------------------------
+[papers.deepseekmath_grpo]
+arxiv_id = "2402.03300"
+title = "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+authors = "Zhihong Shao, Peiyi Wang, Qihao Zhu, et al."
+year = "2024"
+venue = "arXiv cs.CL"
+url = "https://arxiv.org/abs/2402.03300"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要明确定义 GRPO 为 PPO 的一个变体，在增强数学推理能力的同时优化 PPO 的内存占用；DeepSeekMath 7B 在 MATH 上无需外部工具或投票达 51.7%，64 样本 self-consistency 达 60.9%。"
+boundary = "论文的 MATH 分数来自 DeepSeekMath 7B 全量继续预训练 + GRPO，不是本仓 Qwen2-0.5B 的目标值；GRPO 的内存优势在摘要只对 PPO 训练规模成立，不等于本仓单卡可跑。"
+
+[papers.fim_infill]
+arxiv_id = "2207.14255"
+title = "Efficient Training of Language Models to Fill in the Middle"
+authors = "Mohammad Bavarian, Heewoo Jun, Nikolas Tezak, et al."
+year = "2022"
+venue = "arXiv cs.CL"
+url = "https://arxiv.org/abs/2207.14255"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称把文档中间片段移到末尾这一简单数据变换即可让自回归模型学会填充；大量如此变换的训练不损害原有从左到右生成能力（以困惑度与采样评测），并建议自回归模型默认采用 FIM。"
+boundary = "摘要证明的是数据变换不损害 L2R，不证明 PSM/SPM 哪种在具体语料最优、不证明 pass@1/编译率；本仓 PSM 评估与 repo 级隔离是自建协议，不是论文结论。"
+
+[papers.lora]
+arxiv_id = "2106.09685"
+title = "LoRA: Low-Rank Adaptation of Large Language Models"
+authors = "Edward J. Hu, Yelong Shen, Phillip Wallis, et al."
+year = "2021"
+venue = "arXiv cs.CL (ICLR 2022)"
+url = "https://arxiv.org/abs/2106.09685"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 LoRA 冻结预训练权重、在 Transformer 每层注入可训练低秩分解矩阵；以 GPT-3 175B 为例可把可训练参数减少 10,000 倍、GPU 内存需求降低 3 倍，且无额外推理延迟。"
+boundary = "10,000×/3× 是 GPT-3 175B 特定对比，不是本仓 1B/3B/8B 的承诺；论文不证明 loss mask 正确性，也不证明 adapter 一定能复载等价。"
+
+[papers.qlora]
+arxiv_id = "2305.14314"
+title = "QLoRA: Efficient Finetuning of Quantized LLMs"
+authors = "Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer"
+year = "2023"
+venue = "arXiv cs.LG (NeurIPS)"
+url = "https://arxiv.org/abs/2305.14314"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 QLoRA 通过冻结的 4-bit 量化预训练模型向 LoRA 反传梯度，可在单张 48GB GPU 上微调 65B 模型并保留 16-bit 全微调任务表现；关键创新为 NF4、双重量化与 paged optimizers。"
+boundary = "论文同时指出当前聊天机器人基准不足以可信评估性能——这支持本仓的定量 held-out 要求，但论文自身结论不等于本仓指标已达可信门槛。"
+
+[papers.dora]
+arxiv_id = "2402.09353"
+title = "DoRA: Weight-Decomposed Low-Rank Adaptation"
+authors = "Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, et al."
+year = "2024"
+venue = "arXiv cs.CL (ICML 2024 Oral)"
+url = "https://arxiv.org/abs/2402.09353"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 DoRA 把预训练权重分解为幅度与方向两个分量，方向更新用 LoRA 以减少可训练参数；相比 LoRA 提升学习能力与训练稳定性，且不引入额外推理开销，在 LLaMA/LLaVA/VL-BART 上一致优于 LoRA。"
+boundary = "论文结论适用于其实验的 LLaMA/LLaVA/VL-BART 任务；不证明本仓 Granite/SmolVLM 的 4bit+DoRA 装配正确，也不提供本仓 held-out 指标。"
+
+[papers.dpo]
+arxiv_id = "2305.18290"
+title = "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
+authors = "Rafael Rafailov, Archit Sharma, Eric Mitchell, et al."
+year = "2023"
+venue = "arXiv cs.LG (NeurIPS 2023)"
+url = "https://arxiv.org/abs/2305.18290"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 DPO 重新参数化奖励模型，使最优策略可闭式求解，从而用简单分类损失替代 RLHF；免去微调时从模型采样与大量超参搜索，情感控制超过 PPO-based RLHF，摘要与单轮对话中匹配或更优。"
+boundary = "论文的偏好数据是人类标注的单轮对话/摘要，不覆盖图像偏好或 VLM 幻觉；DPO 的稳定性不自动迁移到 RLAIF-V 的 AI 反馈或 MPO 的多损失组合。"
+
+[papers.paligemma]
+arxiv_id = "2407.07726"
+title = "PaliGemma: A versatile 3B VLM for transfer"
+authors = "Lucas Beyer, Andreas Steiner, André Susano Pinto, et al."
+year = "2024"
+venue = "arXiv cs.CV"
+url = "https://arxiv.org/abs/2407.07726"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 PaliGemma 是基于 SigLIP-So400m 视觉编码器与 Gemma-2B 语言模型的开放 VLM，定位为可有效迁移的通用基础模型，在近 40 个任务上评估。"
+boundary = "摘要页未描述 <loc####> 位置 token、1024 离散桶或 COCO xywh 约定；这些来自 Cookbook 代码而非本论文摘要，本仓协议以一手代码的 paligemma_grounding_audit 为准。"
+
+[papers.paligemma2]
+arxiv_id = "2412.03555"
+title = "PaliGemma 2: A Family of Versatile VLMs for Transfer"
+authors = "Andreas Steiner, André Susano Pinto, Michael Tschannen, et al."
+year = "2024"
+venue = "arXiv cs.CV"
+url = "https://arxiv.org/abs/2412.03555"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 PaliGemma 2 基于 Gemma 2 语言模型家族升级 PaliGemma，在 224/448/896px 三种分辨率多阶段训练，并扩展 OCR 类迁移任务。"
+boundary = "摘要未涉及检测/grounding、loc token 或 RefCOCO；本仓 PaliGemma2-3b-pt-448 的 grounding 协议来自 Cookbook 代码，不从本摘要推断。"
+
+[papers.chartqa]
+arxiv_id = "2203.10244"
+title = "ChartQA: A Benchmark for Question Answering about Charts with Visual and Logical Reasoning"
+authors = "Ahmed Masry, Do Xuan Long, Jia Qing Tan, et al."
+year = "2022"
+venue = "arXiv cs.CL (ACL 2022 Findings)"
+url = "https://arxiv.org/abs/2203.10244"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 ChartQA 包含 9.6K 人工书写问题与 23.1K 由人工图表摘要生成的问题，聚焦图表上的视觉与逻辑推理，并指出复杂推理问答仍存在挑战。"
+boundary = "论文定义的是数据集与 human/augmented 构成，不证明任何模型的微调收益；本仓两篇 ChartQA 的原理性阻塞来自 Cookbook 一手代码与 decision 门，不由论文本身推出。"
+
+[papers.vllm_pagedattention]
+arxiv_id = "2309.06180"
+title = "Efficient Memory Management for Large Language Model Serving with PagedAttention"
+authors = "Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, et al."
+year = "2023"
+venue = "arXiv cs.LG (SOSP 2023)"
+url = "https://arxiv.org/abs/2309.06180"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 vLLM 以 PagedAttention 实现近零 KV cache 浪费与跨请求共享，在同等延迟下把主流 LLM 吞吐提升 2–4×，长序列与大模型更明显。"
+boundary = "2–4× 是 serving 相对 FasterTransformer/Orca 的官方结果，不是本仓 rollout colocate 的吞吐；本仓 vLLM on/off 必须实测，不引用该数字作 expected。"
+
+[papers.self_consistency]
+arxiv_id = "2203.11171"
+title = "Self-Consistency Improves Chain of Thought Reasoning in Language Models"
+authors = "Xuezhi Wang, Jason Wei, Dale Schuurmans, et al."
+year = "2022"
+venue = "arXiv cs.CL (ICLR 2023)"
+url = "https://arxiv.org/abs/2203.11171"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 self-consistency 用采样多条推理路径并取最一致答案替代贪心解码，在 GSM8K 等算术/常识基准上显著超越 CoT 贪心（如 GSM8K +17.9%）。"
+boundary = "self-consistency 是解码策略、需多次采样；本仓评估为单次 greedy 以保证可复现，故不采用该收益。论文分数不是本仓数学部分的 expected。"
+
+[papers.dedup_training_data]
+arxiv_id = "2107.06499"
+title = "Deduplicating Training Data Makes Language Models Better"
+authors = "Katherine Lee, Daphne Ippolito, Andrew Nystrom, et al."
+year = "2021"
+venue = "arXiv cs.CL (ACL 2022)"
+url = "https://arxiv.org/abs/2107.06499"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称语言建模语料含大量近重复与长重复子串，去重后模型输出记忆文本频率降低约 10 倍、达到同等或更好精度所需训练步数更少，并可把 train-test 重叠降低（标准数据集验证集超 4% 受影响）。"
+boundary = "论文去重单位是文本子串/文档；本仓按 repo hash / 问题 hash / 图像 bytes hash 做实体级隔离是自建适配，论文不证明这些具体粒度充分。"
+
+[papers.datasheets]
+arxiv_id = "1803.09010"
+title = "Datasheets for Datasets"
+authors = "Timnit Gebru, Jamie Morgenstern, Briana Vecchione, et al."
+year = "2018"
+venue = "arXiv cs.DB (CACM 2021)"
+url = "https://arxiv.org/abs/1803.09010"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要提议每个数据集附带数据表，记录动机、组成、收集过程、推荐用途等信息，以改善数据集创建者与使用者沟通并提升透明度与问责。"
+boundary = "论文是文档化框架，不判定任何具体数据集的许可是否允许商用；本仓对 Bitext/xLAM/Geoperception/RefCOCO 的许可 pending 是待确认事实，不由论文背书解除。"
+
+[papers.rlaif_v]
+arxiv_id = "2405.17220"
+title = "RLAIF-V: Open-Source AI Feedback Leads to Super GPT-4V Trustworthiness"
+authors = "Tianyu Yu, Haoye Zhang, Qiming Li, et al."
+year = "2024"
+venue = "arXiv cs.CL"
+url = "https://arxiv.org/abs/2405.17220"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 RLAIF-V 以全开源范式从高质量反馈数据生成与推理时自反馈两方面对齐 MLLM，6 个基准上提升可信度，7B 减少 object hallucination 80.7%、整体幻觉 33.7%。"
+boundary = "论文的反馈来自开源 MLLM，不是人类偏好；80.7%/33.7% 是其 7B 结果，不是本仓目标值，也不证明本仓 SmolVLM DPO 装配或 shared backbone 对照成立。"
+
+[papers.reward_overopt]
+arxiv_id = "2210.10760"
+title = "Scaling Laws for Reward Model Overoptimization"
+authors = "Leo Gao, John Schulman, Jacob Hilton"
+year = "2022"
+venue = "arXiv cs.LG"
+url = "https://arxiv.org/abs/2210.10760"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称过度优化作为人类偏好代理的奖励模型会按 Goodhart 定律损害真实表现；用固定 gold-standard 奖励模型测量 RL 与 best-of-n 下的关系，并研究 KL 惩罚系数等影响。"
+boundary = "论文结论是奖励优化与真实目标的偏离规律，不提供本仓 RL 的 reward 曲线或独立指标数值；本仓要求监控二者背离是设计原则，不是已通过验收。"
+
+[papers.lima]
+arxiv_id = "2305.11206"
+title = "LIMA: Less Is More for Alignment"
+authors = "Chunting Zhou, Pengfei Liu, Puxin Xu, et al."
+year = "2023"
+venue = "arXiv cs.CL"
+url = "https://arxiv.org/abs/2305.11206"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 LIMA 用仅 1,000 条精挑提示-回答以标准监督损失微调 65B LLaMa、无 RL 与偏好建模即可学得响应格式并泛化到未见任务，支持「大部分知识来自预训练、少量高质量指令即可对齐」。"
+boundary = "论文针对 65B 通用对齐，不证明客服领域小模型多配置网格的收益或本仓 ROUGE-L 口径；1,000 条不是本仓数据规模要求。"
+
+[papers.underspecification]
+arxiv_id = "2011.03395"
+title = "Underspecification Presents Challenges for Credibility in Modern Machine Learning"
+authors = "Alexander D'Amour, Katherine Heller, Dan Moldovan, et al."
+year = "2020"
+venue = "arXiv cs.LG"
+url = "https://arxiv.org/abs/2011.03395"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要定义欠规范：管线可返回多个在训练域 held-out 表现相当、但在部署域行为差异很大的预测器，覆盖视觉、医疗、NLP 等多个实践管线，需在建模管线中显式考虑。"
+boundary = "论文论证的是多解等价风险，不规定具体 seed 数量或区间算法；本仓至少 3 个互异训练 seed + Student-t95 是自建工程决策，论文只提供动机。"
+
+[papers.qwen2vl]
+arxiv_id = "2409.12191"
+title = "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution"
+authors = "Peng Wang, Shuai Bai, Sinan Tan, et al."
+year = "2024"
+venue = "arXiv cs.CV"
+url = "https://arxiv.org/abs/2409.12191"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 Qwen2-VL 引入 Naive Dynamic Resolution 处理不同分辨率图像为不同数量视觉 token，并用 M-RoPE 融合文本/图像/视频位置信息。"
+boundary = "论文是模型技术报告，不提供 ChartQA relaxed accuracy 的本仓数值，也不证明 4bit/LoRA 微调装配正确；两篇 ChartQA 的原理性阻塞独立于该论文。"
+
+[papers.qwen25vl]
+arxiv_id = "2502.13923"
+title = "Qwen2.5-VL Technical Report"
+authors = "Shuai Bai, Keqin Chen, Xuejing Liu, et al."
+year = "2025"
+venue = "arXiv cs.CV"
+url = "https://arxiv.org/abs/2502.13923"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 Qwen2.5-VL 具备精确目标定位能力，可用 bounding box 或点定位物体，并引入动态分辨率与绝对时间编码以原生感知空间尺度。"
+boundary = "论文描述的是 Qwen2.5-VL 原生能力，不证明本仓 VLM GRPO 视觉 rollout 或 PaliGemma 的 1024 桶 loc 协议；不作为任何本仓评测目标值。"
+
+[papers.toolformer]
+arxiv_id = "2302.04761"
+title = "Toolformer: Language Models Can Teach Themselves to Use Tools"
+authors = "Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, et al."
+year = "2023"
+venue = "arXiv cs.CL"
+url = "https://arxiv.org/abs/2302.04761"
+verified = true
+verified_at = "2026-11-17"
+core_claim = "摘要称 Toolformer 以自监督方式让模型学会决定调用哪些 API、何时调用、传什么参数以及如何融入后续预测，仅需每个 API 少量示范。"
+boundary = "论文不证明严格 JSON schema 校验、gold 不进 prompt 或 completion-only mask 的必要性；这些是本仓 xLAM 自建协议的工程判断。"
+
+# 未取得一手摘要页核实的论文：verified=false，只能作补充，不能作 principle 主依据。
+[papers.mpl_mpo]
+arxiv_id = ""
+title = "Mixed Preference Optimization (MPO) — 一手 arXiv id 未定位"
+authors = ""
+year = ""
+url = ""
+verified = false
+verified_at = "2026-11-17"
+core_claim = ""
+boundary = "多来源指向 MPO 用 DPO(sigmoid)+BCO(bco_pair)+SFT 三损失、权重 0.8/0.2/1.0（见 TRL v0.20.0 release 说明），但未核到一手论文摘要页，故不作为任何 principle 的直接依据；本仓实现以 Cookbook/TRL 一手代码为准。"
+
+[papers.referit_refcoco]
+arxiv_id = ""
+title = "RefCOCO / REFER — 一手 arXiv id 未定位"
+authors = ""
+year = ""
+url = ""
+verified = false
+verified_at = "2026-11-17"
+core_claim = ""
+boundary = "记忆中的 1604.07399 经一手核查是宇宙射线模拟论文，已作废；RefCOCO 数据集出处未取得一手摘要页，故标 unverified，仅作补充引用。"
+
+[papers.xlam_dataset]
+arxiv_id = ""
+title = "xLAM function-calling dataset card — 一手 arXiv 论文未定位"
+authors = ""
+year = ""
+url = "https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k"
+verified = false
+verified_at = "2026-11-17"
+core_claim = ""
+boundary = "一手来源是 HF 数据卡（gated、research-only），非论文；数据卡列 query/tools/answers，2024-07 重生成条目与商业许可均未确认。"
+
+# ---------------------------------------------------------------------------
+# 编号更正：一手核查中发现的误用，was != now。保留 was 作为「不可凭记忆」的物证。
+# ---------------------------------------------------------------------------
+[[corrections]]
+was = "2204.14108"
+now = "2207.14255"
+topic = "FIM 填充中间"
+reason = "凭记忆写的 2204.14108 一手核查为《Motivating Data Science Students to Participate and Learn》；FIM 正确论文是 Bavarian 等《Efficient Training of Language Models to Fill in the Middle》。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2404.14367"
+now = "2405.17220"
+topic = "RLAIF-V"
+reason = "2404.14367 实为《Preference Fine-Tuning of LLMs Should Leverage Suboptimal, On-Policy Data》；RLAIF-V 正确编号 2405.17220。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2404.10779"
+now = ""
+topic = "MPO"
+reason = "2404.10779 实为《Fine Tuning LLM for Enterprise: Practical Guidelines and Recommendations》，与 MPO 无关；MPO 一手论文未定位，标 unverified。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2109.07980"
+now = ""
+topic = "数据污染 / 记忆"
+reason = "2109.07980 实为粒子物理《Emergent new symmetry from the Higgs shadow》，作废；数据污染方法论改用 2107.06499 与 2011.03395 支撑。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "1604.07399"
+now = ""
+topic = "RefCOCO / REFER"
+reason = "1604.07399 实为宇宙射线模拟《Simulating cosmic ray physics on a moving mesh》，作废；RefCOCO 一手来源标 unverified。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2411.14405"
+now = ""
+topic = "InternVL2.5 / MPO"
+reason = "2411.14405 实为《Marco-o1: Towards Open Reasoning Models for Open-Ended Solutions》，与 MPO 无关。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2307.09405"
+now = ""
+topic = "RLAIF / 偏好"
+reason = "2307.09405 实为骨肉瘤化疗剂量研究，作废。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2308.05005"
+now = ""
+topic = "迁移学习 / 对齐"
+reason = "2308.05005 实为多源卫星影像森林制图，作废。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2112.11446"
+now = "2011.03395"
+topic = "多 seed / 可信度"
+reason = "2112.11446 是 Gopher 模型规模论文，不是统计显著性方法论；改用 D'Amour 等欠规范论文支撑多 seed 动机。"
+checked_at = "2026-11-17"
+
+[[corrections]]
+was = "2203.11171"
+now = ""
+topic = "self-consistency 用途边界"
+reason = "编号正确（Self-Consistency），但本仓评估固定 greedy，不采用其多次采样收益；登记为「论文支持但本仓不适用」，避免把 +17.9% 误当本仓目标。"
+checked_at = "2026-11-17"
+
+# ---------------------------------------------------------------------------
+# 方法论主张：每条绑定一手论文、支撑类型与边界。support 语义：
+#   paper_supports = 论文一手结论直接支持该做法；
+#   we_adapted     = 我们据论文修正上游实现，属本仓工程判断，论文不直接保证；
+#   paper_limited  = 论文结论有明确边界或本仓不适用，显式标注以防夸大。
+# ---------------------------------------------------------------------------
+[principles.grpo_critic_free]
+paper = "deepseekmath_grpo"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "GRPO 是 PPO 的变体，用组内相对分数替代 critic 以降低内存，适合可核验 reward 的数学/RL 任务。"
+boundary = "论文的 memory 结论限于其训练规模；本仓仍未 CUDA 实跑，不宣称内存收益已复现。"
+
+[principles.reward_hacking_needs_independent_metric]
+paper = "reward_overopt"
+support = "paper_supports"
+scope = "evaluation_guidance"
+claim = "代理 reward 过度优化会偏离真实目标，因此 RL 训练须监控 reward 曲线与独立指标是否背离，背离即停止。"
+boundary = "论文不提供本仓的 reward 阈值或背离判据数值；本仓的停止规则是设计约定。"
+
+[principles.multiseed_underspecification]
+paper = "underspecification"
+support = "paper_supports"
+scope = "evaluation_guidance"
+claim = "同等 held-out 表现的多个模型可能在部署时行为不同，故对照需多个互异训练 seed 与区间，而非单 seed 点估计。"
+boundary = "论文不规定 seed 数量；本仓至少 3 seed 与 Student-t95 是自建选择。"
+
+[principles.self_consistency_not_for_repro]
+paper = "self_consistency"
+support = "paper_limited"
+scope = "evaluation_guidance"
+claim = "self-consistency 以多次采样换精度，与本仓单次 greedy 的可复现目标冲突，故评估固定 greedy，不引用其采样收益。"
+boundary = "论文 GSM8K +17.9% 等数字来自其采样设置，不是本仓 expected。"
+
+[principles.fim_augmentation_preserves_l2r]
+paper = "fim_infill"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "把中间片段移到末尾的数据变换可教会自回归模型填充且不损害从左到右能力，支持 FIM 作为仓库级数据增强。"
+boundary = "论文未证明 PSM/SPM 在具体语料的最优选择，也不执行生成代码或测编译率。"
+
+[principles.peft_lora_reduces_memory]
+paper = "lora"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "冻结预训练权重并注入低秩矩阵可大幅降低可训练参数与内存、无额外推理延迟，是 adapter-only 导出的依据。"
+boundary = "论文的 10,000×/3× 是 GPT-3 175B 对比，不映射到本仓模型规模。"
+
+[principles.qlora_fourbit]
+paper = "qlora"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "4-bit NF4 + 双重量化 + paged optimizers 可在单卡微调大模型，是 QLoRA/nf4 装配的文献依据。"
+boundary = "论文也指出聊天基准评估不可信，支持本仓定量 held-out；但论文结论不等于本仓已通过可信评估。"
+
+[principles.dora_decomposition]
+paper = "dora"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "DoRA 把权重分解为幅度与方向、方向用 LoRA 更新，在学习能力与稳定性上优于 LoRA 且无额外推理开销。"
+boundary = "限于论文实验的 LLaMA/LLaVA/VL-BART；本仓 use_dora 配置正确性与指标均未验收。"
+
+[principles.completion_only_loss]
+paper = "lora"
+support = "we_adapted"
+scope = "design_guidance"
+claim = "本仓改用 completion-only collator，只对回答/loc/bbox 后缀与 EOS 计 loss、prompt 与图像 token 置 -100，以修正 Cookbook 的全文损失。"
+boundary = "这是本仓基于 PEFT 的工程判断，LoRA 论文不直接证明 mask 正确性；其上训练与指标未实测。"
+
+[principles.image_level_split]
+paper = "dedup_training_data"
+support = "we_adapted"
+scope = "design_guidance"
+claim = "本仓按图像原始字节 hash 做 80/10/10 分段并对规范化问答全局去重，防止同图变体跨 split 泄漏。"
+boundary = "去重论文的粒度是文本子串/文档；图像字节 hash 隔离是本仓自建，未验收。"
+
+[principles.dedup_reduces_leakage]
+paper = "dedup_training_data"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "训练语料近重复会造成记忆与 train-test 重叠，去重可降低记忆频率与重叠、提升评估准确性。"
+boundary = "论文不覆盖 repo/问题/图像实体级隔离粒度，本仓的隔离充分性未验收。"
+
+[principles.datasheets_license_documentation]
+paper = "datasheets"
+support = "paper_supports"
+scope = "upstream_finding"
+claim = "数据集应文档化来源、组成、收集过程、推荐用途与许可，故本仓逐篇登记 license pending 而不擅自假定可商用。"
+boundary = "论文是文档框架，不判定具体许可；Bitext/xLAM/Geoperception/RefCOCO 许可仍待确认。"
+
+[principles.dpo_closed_form]
+paper = "dpo"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "DPO 以闭式最优策略把偏好对齐化为分类损失，免去显式 reward model 与采样，是偏好篇的主方法依据。"
+boundary = "论文的偏好是人类标注文本，不覆盖图像偏好；DPO 稳定性不自动迁移到 VLM。"
+
+[principles.rlaif_v_open_feedback]
+paper = "rlaif_v"
+support = "paper_supports"
+scope = "upstream_finding"
+claim = "RLAIF-V 用开源 MLLM 反馈替代人工标注降低幻觉，支持图像偏好篇以 AI 反馈构建 chosen/rejected 的方向。"
+boundary = "论文 80.7%/33.7% 是其 7B 结果，不是本仓目标；本仓该篇五维尚未实现。"
+
+[principles.shared_backbone_ablation]
+paper = "underspecification"
+support = "we_adapted"
+scope = "evaluation_guidance"
+claim = "DPO 与 MPO 必须用同 backbone / 同偏好 split 做配对对照，否则算法差异与模型差异混淆，无法归因。"
+boundary = "现有 Cookbook 两篇模型不同，不满足该前提；本仓两篇五维未实现，无法做配对实验。"
+
+[principles.toolformer_api_args]
+paper = "toolformer"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "工具调用需学会选择 API、决定参数并融入后续预测，支持 function-calling 任务对 tools 与参数结构做严格 schema 校验。"
+boundary = "论文不证明严格 JSON 数组输出或 gold 不进 prompt 的必要性，那些是本仓自建协议。"
+
+[principles.strict_json_completion_only]
+paper = "toolformer"
+support = "we_adapted"
+scope = "design_guidance"
+claim = "本仓仅对 <calls> 严格 JSON 数组 + EOS 计 loss、给全 tools、gold 不进输入，并用 json.loads 解析且绝不执行生成调用。"
+boundary = "四指标是格式/协议指标，不等于 pass@1 或真实 API 执行正确率；无 GPU 实跑。"
+
+[principles.vllm_off_on_ablation]
+paper = "vllm_pagedattention"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "vLLM 的吞吐收益来自 serving 层 KV cache 管理，故 colocate 篇须做只改开关的同配置 on/off 对照才能归因。"
+boundary = "论文 2–4× 不是本仓 rollout 结果；本仓 vLLM 篇五维未实现。"
+
+[principles.single_box_iou_loc]
+paper = "qwen25vl"
+support = "we_adapted"
+scope = "design_guidance"
+claim = "本仓对 grounding 用 COCO xywh→xyxy、1024 桶 <loc####> round-trip IoU 与单框四指标，修正 Cookbook 的格式与 prompt 不一致。"
+boundary = "Qwen2.5-VL 论文描述的是其原生定位能力，不支撑本仓 loc 协议；单框 IoU 不等于 mAP/AP。"
+
+[principles.chartqa_zero_train_gate]
+paper = "chartqa"
+support = "we_adapted"
+scope = "upstream_finding"
+claim = "Qwen2-VL ChartQA 篇因上游自承零训练基线达标而 decision.gate=blocked，训练无业务增量，方法论上应拒绝投入训练预算。"
+boundary = "这是 Cookbook 一手 decision 门结论，ChartQA 论文只定义数据集；补代码或 GPU 证据都不解除该阻塞。"
+
+[principles.chartqa_contamination]
+paper = "dedup_training_data"
+support = "we_adapted"
+scope = "upstream_finding"
+claim = "SmolVLM-Instruct 基座已在 ChartQA 上训练过，同集 held-out 不构成泛化验证，须换未污染外部集才能作 baseline。"
+boundary = "污染事实来自 Cookbook 与基座说明，去重论文只提供方法论动机；换集与重判均未完成。"
+
+[principles.qualitative_only_gap]
+paper = "qlora"
+support = "paper_supports"
+scope = "evaluation_guidance"
+claim = "Cookbook 只展示单样本定性生成，须补定量 held-out；QLoRA 论文也指出聊天基准不足以免信，支持这一评估纪律。"
+boundary = "论文结论不代替本仓指标；本仓定量协议已声明但未在 CUDA 上实测。"
+
+[principles.lima_quality_over_quantity]
+paper = "lima"
+support = "paper_supports"
+scope = "design_guidance"
+claim = "少量高质量指令即可对齐且知识主要来自预训练，支持客服 SFT 以规范化问答质量与去重为先，而非堆样本数。"
+boundary = "论文针对 65B 通用对齐；本仓 RapidFire 的 4 配置与 ROUGE-L 口径不从该论文推出。"
+
+[principles.session_isolation]
+paper = "reward_overopt"
+support = "we_adapted"
+scope = "design_guidance"
+claim = "在线 agent RL 须按对局/词表隔离并回收会话，避免 reward 与独立指标背离时泄漏状态或误判收益。"
+boundary = "论文讲 reward 过优化规律，不覆盖环境生命周期；本仓 Wordle 篇五维未实现。"
+
+# ---------------------------------------------------------------------------
+# 14 篇逐篇立场：每篇绑定主张 + 主论文（须与主张引用的一手论文一致）+
+# 仅作补充的 unverified 论文（不得作为 principle 主依据）。
+# ---------------------------------------------------------------------------
+[recipes."llm/grpo/qwen2-0-5b-numinamath"]
+principles = ["grpo_critic_free", "reward_hacking_needs_independent_metric", "multiseed_underspecification", "self_consistency_not_for_repro"]
+primary_papers = ["deepseekmath_grpo", "reward_overopt", "underspecification", "self_consistency"]
+supplement_papers = []
+stance = "GRPO 主方法来自 DeepSeekMath 一手摘要；多 seed 与 reward 背离监控是防欠规范/过优化的自建纪律；评估固定 greedy，明确排除 self-consistency 的采样收益。全部只有离线合成证据。"
+
+[recipes."llm/grpo/qwen2-0-5b-vllm-colocate"]
+principles = ["vllm_off_on_ablation", "grpo_critic_free"]
+primary_papers = ["vllm_pagedattention", "deepseekmath_grpo"]
+supplement_papers = []
+stance = "vLLM 收益属 serving 层（PagedAttention 一手摘要），必须单变量 on/off 对照才能归因；本仓五维未实现，未做同步/吞吐/显存实测。"
+
+[recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
+principles = ["reward_hacking_needs_independent_metric", "multiseed_underspecification", "self_consistency_not_for_repro"]
+primary_papers = ["reward_overopt", "underspecification", "self_consistency"]
+supplement_papers = []
+stance = "四 reward 与 GSM8K 消融的方法论动机是 reward 过优化与欠规范；本仓五维未实现，gold 剥离、verifier、reward hacking 诊断均缺。"
+
+[recipes."llm/sft/starcoder1b-fim"]
+principles = ["fim_augmentation_preserves_l2r", "dedup_reduces_leakage", "completion_only_loss", "peft_lora_reduces_memory"]
+primary_papers = ["fim_infill", "dedup_training_data", "lora"]
+supplement_papers = []
+stance = "FIM 数据变换与 repo 级去重有论文依据；PSM 评估、文件内 padding 与 adapter-only 是本仓自建；不执行生成代码，exact-match 不冒充 pass@1。"
+
+[recipes."llm/sft/llama3-8b-xlam-function-calling"]
+principles = ["toolformer_api_args", "strict_json_completion_only", "datasheets_license_documentation"]
+primary_papers = ["toolformer", "datasheets"]
+supplement_papers = ["xlam_dataset"]
+stance = "工具调用结构依据 Toolformer；严格 JSON、gold 不进 prompt、json.loads 不执行调用是本仓自建；xLAM 数据卡 gated/research-only，一手 arXiv 论文未核到，仅作补充。"
+
+[recipes."llm/sft/rapidfire-multiconfig"]
+principles = ["datasheets_license_documentation", "lima_quality_over_quantity", "dedup_reduces_leakage"]
+primary_papers = ["datasheets", "lima", "dedup_training_data"]
+supplement_papers = []
+stance = "质量优先与去重有文献依据；无 stemmer ROUGE-L、4 配置顺序执行是自建修正，数值与上游不可比；Bitext 数据卡未给 license。"
+
+[recipes."vlm/sft/qwen2-vl-7b-chartqa"]
+principles = ["chartqa_zero_train_gate", "qualitative_only_gap"]
+primary_papers = ["chartqa", "qwen2vl"]
+supplement_papers = ["qlora"]
+stance = "ChartQA 论文定义数据集、Qwen2-VL 是模型技术报告；两者都不支持训练收益。本篇方法论结论是 decision.gate=blocked：零训练基线已达标，原理性拒绝训练预算。"
+
+[recipes."vlm/sft/smolvlm-chartqa"]
+principles = ["chartqa_contamination", "dedup_reduces_leakage", "qualitative_only_gap"]
+primary_papers = ["dedup_training_data", "chartqa"]
+supplement_papers = ["qlora"]
+stance = "方法论重点是污染检查：基座已在 ChartQA 上训练过，同集 held-out 无效。论文只提供去重/数据集动机；须换未污染外部集并重判，补代码或证据不解除阻塞。"
+
+[recipes."vlm/sft/granite-vision-line-comparison"]
+principles = ["dora_decomposition", "qlora_fourbit", "completion_only_loss", "image_level_split", "qualitative_only_gap"]
+primary_papers = ["dora", "qlora", "lora"]
+supplement_papers = ["dedup_training_data"]
+stance = "DoRA/QLoRA 装配有论文依据；双层 mask、同图 hash 隔离、逐题重算是修正 Cookbook 的自建协议。上游文字写 LoRA 而配置为 use_dora=True，已按一手代码登记。"
+
+[recipes."vlm/sft/paligemma2-refcoco-grounding"]
+principles = ["single_box_iou_loc", "completion_only_loss", "image_level_split", "qualitative_only_gap"]
+primary_papers = ["paligemma", "paligemma2", "qwen25vl"]
+supplement_papers = ["lora", "dedup_training_data", "qlora", "referit_refcoco"]
+stance = "PaliGemma/2 论文只支持模型与迁移定位，loc 1024 桶与 COCO xywh 来自 Cookbook 一手代码；本仓统一 prompt、双层 mask、单框 IoU 为自建修正，RefCOCO 一手来源未核到。"
+
+[recipes."vlm/dpo/smolvlm-rlaif-v"]
+principles = ["dpo_closed_form", "rlaif_v_open_feedback", "shared_backbone_ablation"]
+primary_papers = ["dpo", "rlaif_v", "underspecification"]
+supplement_papers = []
+stance = "DPO 闭式损失与 RLAIF-V 开源反馈各有论文依据；但本仓该篇五维未实现，且与 MPO 篇非 shared backbone，无法直接归因算法差异。"
+
+[recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
+principles = ["dpo_closed_form", "shared_backbone_ablation", "qualitative_only_gap"]
+primary_papers = ["dpo", "underspecification", "qlora"]
+supplement_papers = ["mpl_mpo"]
+stance = "MPO 三损失组合只见二手/TRL release 说明，一手 arXiv 未核到，仅作补充；本仓该篇五维未实现，sigmoid/bco_pair/sft 装配与 shared backbone 对照均未完成。"
+
+[recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
+principles = ["grpo_critic_free", "single_box_iou_loc", "reward_hacking_needs_independent_metric"]
+primary_papers = ["deepseekmath_grpo", "qwen25vl", "qwen2vl", "reward_overopt"]
+supplement_papers = []
+stance = "GRPO 的数学 reward 依据可迁移到视觉推理的动机，Qwen2.5-VL 支持 bbox 定位；但本仓五维未实现，视觉 rollout/reward 失败关闭与图像级隔离均缺。"
+
+[recipes."agent/grpo/wordle-openenv-hf-jobs"]
+principles = ["grpo_critic_free", "reward_hacking_needs_independent_metric", "session_isolation"]
+primary_papers = ["deepseekmath_grpo", "reward_overopt"]
+supplement_papers = []
+stance = "GRPO 与 reward 过优化提供在线 RL 动机；按对局隔离与会话回收是本仓工程判断。OpenEnv 轨迹 schema、rollout/桥接、独立 solve-rate 均未实现，HF Jobs/papermill 不算本仓执行层。"

@@ -1,0 +1,51 @@
+# 最小合法 VLM SFT recipe：用于验证「正确配置应当零 error」。
+schema = 1
+id = "vlm/sft/valid-minimal"
+name = "最小合法样例"
+status = "ported"
+coverage = "params"
+confidence = "primary"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_trl"
+source_sha = "0123456789abcdef"
+
+[method]
+family = "sft"
+trainer = "SFTTrainer"
+
+[model]
+base = "example/vlm"
+modality = "vlm"
+
+[dataset]
+name = "example/data"
+structure = "conversational"
+type = "prompt-completion"
+has_images = true
+
+[modality_contract]
+images_column = "images"
+content_list_dict = true
+processing_class = "processor"
+max_length = "none"
+
+[dependencies]
+trl = "0.23.1"
+transformers = "4.57.0"
+
+[baseline]
+zero_train = true
+result = "fails"
+
+[evaluation]
+metrics = ["exact_match"]
+held_out = true
+seed = 42
+multi_run = true
+compute_metrics = true
+
+[budget]
+smoke_steps = 5
+full_steps = 100
+
+[todo]
+items = ["补齐 evidence"]

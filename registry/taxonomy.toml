@@ -1,0 +1,171 @@
+# 方法分类学：family -> trainer / 允许的 dataset type / TRL v1 层级
+# 依据：TRL 官方文档 trainer taxonomy + dataset_formats，以及调研报告第 02 章。
+# tier: stable | experimental | variant | recipe | external | removed
+#   variant / recipe 表示「不是独立 trainer」，只是某个 trainer 的损失变体或配置组合。
+
+schema = 1
+allowed_structures = ["conversational", "standard"]
+allowed_dataset_types = [
+  "language-modeling",
+  "prompt-completion",
+  "preference",
+  "unpaired-preference",
+  "prompt-only",
+]
+
+[families.sft]
+trainer = "SFTTrainer"
+dataset_types = ["language-modeling", "prompt-completion"]
+tier = "stable"
+requires_verifiable_reward = false
+
+# 明确 recipe/task 二元白名单；不允许其他 SFT 擅自替换 Trainer。
+[families.sft.task_trainers.code-fim-v1]
+recipe_id = "llm/sft/starcoder1b-fim"
+trainer = "Trainer"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_code_llm_on_single_gpu"
+
+# 本仓执行层用 Trainer + completion-only collator；上游 notebook 为
+# SFTTrainer(dataset_text_field="text") 全文损失，差异见 evidence.toml xlam_adapter_audit。
+[families.sft.task_trainers.xlam-fc-v1]
+recipe_id = "llm/sft/llama3-8b-xlam-function-calling"
+trainer = "Trainer"
+source = "https://huggingface.co/learn/cookbook/function_calling_fine_tuning_llms_on_xlam"
+
+# wave3 首篇 VLM：本仓用普通 Trainer + 自建双层 mask collator
+#（上游 SFTTrainer + skip_prepare_dataset），差异见 evidence.toml
+# granite_vision_audit。comparison/export 齐备后 recipe 已声明该 task_id，
+# task_router 按精确 recipe_id 注册 granite_suite / granite_export（ADR-022）。
+[families.sft.task_trainers.granite-linecomparison-v1]
+recipe_id = "vlm/sft/granite-vision-line-comparison"
+trainer = "Trainer"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_granite_vision_sft_trl"
+
+# wave3 第二篇 VLM：普通 Trainer + 自建 completion-only collator + 单框
+# <loc####> / IoU 协议（上游 SFTTrainer + skip_prepare_dataset 且 prompt 也计 loss），
+# 差异见 evidence.toml paligemma_grounding_audit 与 DESIGN.md ADR-023。
+[families.sft.task_trainers.paligemma-grounding-v1]
+recipe_id = "vlm/sft/paligemma2-refcoco-grounding"
+trainer = "Trainer"
+source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_object_detection_grounding"
+
+[families.dpo]
+trainer = "DPOTrainer"
+dataset_types = ["preference"]
+tier = "stable"
+requires_verifiable_reward = false
+
+[families.mpo]
+trainer = "DPOTrainer"
+dataset_types = ["preference"]
+tier = "recipe"
+requires_verifiable_reward = false
+note = "不是新 trainer：DPOConfig(loss_type=['sigmoid','bco_pair','sft'], loss_weights=[0.8,0.2,1.0])"
+
+[families.kto]
+trainer = "KTOTrainer"
+dataset_types = ["unpaired-preference", "preference"]
+tier = "stable"
+requires_verifiable_reward = false
+
+[families.reward-modeling]
+trainer = "RewardTrainer"
+dataset_types = ["preference"]
+tier = "stable"
+requires_verifiable_reward = false
+
+[families.grpo]
+trainer = "GRPOTrainer"
+dataset_types = ["prompt-only"]
+tier = "stable"
+requires_verifiable_reward = true
+
+[families.rloo]
+trainer = "RLOOTrainer"
+dataset_types = ["prompt-only"]
+tier = "stable"
+requires_verifiable_reward = true
+
+[families.online-dpo]
+trainer = "OnlineDPOTrainer"
+dataset_types = ["prompt-only"]
+tier = "experimental"
+requires_verifiable_reward = true
+
+[families.gspo]
+trainer = "GRPOTrainer"
+dataset_types = ["prompt-only"]
+tier = "variant"
+requires_verifiable_reward = true
+note = "不是新 trainer：GRPO 的 loss 变体，importance_sampling_level='sequence'"
+
+[families.distillation]
+trainer = "DistillationTrainer"
+dataset_types = ["prompt-completion"]
+tier = "stable"
+requires_verifiable_reward = false
+
+[families.orpo]
+trainer = "ORPOTrainer"
+dataset_types = ["preference"]
+tier = "experimental"
+requires_verifiable_reward = false
+
+[families.cpo]
+trainer = "CPOTrainer"
+dataset_types = ["preference"]
+tier = "experimental"
+requires_verifiable_reward = false
+
+[families.gkd]
+trainer = "GKDTrainer"
+dataset_types = ["prompt-completion"]
+tier = "experimental"
+requires_verifiable_reward = false
+
+[families.prompt-tuning]
+trainer = "Trainer"
+dataset_types = ["language-modeling", "prompt-completion"]
+tier = "external"
+requires_verifiable_reward = false
+note = "PEFT Prompt Tuning，走 HF Trainer，不属于 TRL trainer 体系"
+
+[families.hpo]
+trainer = "Trainer"
+dataset_types = ["language-modeling", "prompt-completion"]
+tier = "external"
+requires_verifiable_reward = false
+note = "超参搜索 / 多配置并发编排，不是单一 trainer"
+
+[families.ppo]
+trainer = "PPOTrainer"
+dataset_types = ["prompt-only"]
+tier = "removed"
+requires_verifiable_reward = true
+note = "TRL v1 taxonomy 已移除 PPOTrainer / PPOConfig，经典 PPO 全栈不再是当前主线"
+
+# 已核对过的 trl <-> transformers 组合。未登记组合不会硬失败，只产生 warning，
+# 提示维护者补一次兼容性验证后再加入白名单。
+[[compat.matrix]]
+trl = "0.12.2"
+transformers = "4.46.3"
+source_recipe = "vlm/dpo/smolvlm-rlaif-v"
+
+[[compat.matrix]]
+trl = "0.23.1"
+transformers = "4.57.0"
+source_recipe = "llm/grpo/qwen2-0-5b-vllm-colocate"
+
+# 曾登记 trl 1.7.0 + transformers 5.3.0（source_recipe=agent/grpo/wordle-openenv-hf-jobs）。
+# 2026-11-13 回上游核对后确认该组合系编造：上游只有 'transformers>=5.3.0' 浮动约束，
+# 且根本没有 trl 版本。已删除；详见 registry/evidence.toml 的 F01 与 unverified 段。
+
+[version_policy]
+# 禁止 >=、^、~、*、latest 这类浮动约束；recipe 必须精确 pin。
+pinned_pattern = '^\d[\w.+-]*$'
+dev_markers = ["dev", "rc", "alpha", "beta", "pre"]
+allowed_source_hosts = [
+  "huggingface.co",
+  "github.com",
+  "raw.githubusercontent.com",
+]

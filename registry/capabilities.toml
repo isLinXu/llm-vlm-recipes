@@ -1,0 +1,249 @@
+# 本地时点事实；不推断上游现状，不把配方登记或 dry-run 当成能力实现。
+schema = 1
+assessed_at = "2026-11-13"
+expected_recipe_count = 14
+dimensions = ["data", "train", "eval", "comparison", "export"]
+
+[states]
+missing = "任务逻辑未实现；配置、入口、TODO、dry-run 与 lock 模板均不算实现。"
+implemented = "真实任务代码存在，并有 offline test 覆盖；仅核验仓内实现与测试文件，不代表 GPU 通过。"
+unverified = "声称有实现或实跑，但实现/测试/运行证据不足；不能当作 implemented 或 verified。"
+verified = "代码与 offline test 齐备，仓内真实 evidence JSON 的 stage=completed 且 kind 与维度相符；train/eval 还须 GPU 运行证据。"
+
+[evidence_kinds]
+data = "data"
+train = "training"
+eval = "evaluation"
+comparison = "baseline-suite"
+export = "export-reload"
+
+[scope.cpt-dapt]
+label = "CPT / DAPT 继续预训练与领域适应"
+status = "backlog"
+families = []
+taxonomy = "not_registered"
+why = "未纳入当前 taxonomy；需语料许可、文档去重、按来源隔离、长文本打包与 perplexity/领域任务回归，不能用现有 SFT 覆盖冒充。"
+[scope.general-sft]
+label = "通用文本 SFT"
+status = "in_scope"
+families = ["sft"]
+why = "现有 xLAM/FIM 是专用任务；还需通用对话、assistant-only mask、packing、截断回归及指令跟随评估。"
+[scope.text-preference]
+label = "文本偏好优化"
+status = "in_scope"
+families = ["dpo", "mpo", "kto", "orpo", "cpo"]
+why = "现有 DPO/MPO 配方都是 VLM，不代表文本偏好已覆盖；需共享 backbone/数据/预算与独立偏好评估。"
+[scope.reward-modeling]
+label = "RM 奖励建模"
+status = "backlog"
+families = ["reward-modeling"]
+why = "family 已登记但无配方；需偏好对、标注质量、reward 校准、泛化与 reward hacking 检查。"
+[scope.online-rl]
+label = "online RL 与 agent RL"
+status = "in_scope"
+families = ["grpo", "rloo", "online-dpo", "gspo"]
+why = "先验证数学可核验 reward，再支持 rollout 权重同步、环境生命周期和独立对局；现有 GRPO 登记不代表其余算法已实现。"
+[scope.distillation]
+label = "蒸馏"
+status = "backlog"
+families = ["distillation", "gkd"]
+why = "family 已登记但无配方；需 teacher revision、采样与成本、生成数据追踪、student 对照和许可。"
+[scope.image]
+label = "多模态图片"
+status = "in_scope"
+families = ["sft", "dpo", "mpo", "grpo"]
+why = "需 image/processor/collator 实装、视觉 token mask、图像级隔离及 ChartQA/grounding 污染检查。"
+[scope.audio]
+label = "多模态音频"
+status = "backlog"
+families = []
+taxonomy = "not_registered"
+why = "未纳入当前 taxonomy；需音频采样率、切片、说话人隔离、转写/语音任务指标，图片 VLM 不能代替。"
+[scope.video]
+label = "多模态视频"
+status = "backlog"
+families = []
+taxonomy = "not_registered"
+why = "未纳入当前 taxonomy；需帧采样、时间标注、视频级隔离与时序评估，静态图像流程不能代替。"
+[scope.data]
+label = "数据构建"
+status = "in_scope"
+families = []
+why = "跨方法管线而非 trainer family；覆盖 schema、许可、gold 剥离、去重、冻结 manifest、合成数据溯源与 split 泄漏门禁。"
+[scope.evaluation]
+label = "eval 评估体系"
+status = "in_scope"
+families = []
+why = "跨方法管线；需同协议 zero-shot、held-out、至少 3 个独立训练 seed 的方差/置信区间和失败样本。"
+[scope.release]
+label = "发布与业务交付"
+status = "in_scope"
+families = []
+why = "跨方法管线；需打包、全新进程离线复载、指标回归、许可、成本/SLO、安全、owner、监控与回滚，不执行远端发布。"
+[scope.legacy-ppo]
+label = "经典 PPO 全栈"
+status = "excluded"
+families = ["ppo"]
+why = "当前仓内 taxonomy 将 ppo 标为 removed；不扩张本轮主线，未来需求变化时须单独决定，不据此推断上游时点。"
+
+[[waves]]
+id = "wave0"
+label = "fail-closed 门禁"
+dependencies = []
+prerequisites = "完整14篇登记、taxonomy 时点快照与代码/测试证据边界已核对。"
+work = "严格校验 coverage、状态、impl/test 路径与 completed JSON；拒绝缺失 checkpoint 回退 base、假分数和 dry-run 晋级。"
+acceptance = "负例单测通过；registered、implemented、GPU verified、research-ready、business-ready 分开计数；缺证据直接阻断晋级。"
+[[waves]]
+id = "wave1"
+label = "数学端到端样板"
+dependencies = ["wave0"]
+prerequisites = "wave0 门禁验收；真实 model/dataset revision 与依赖锁定，确认 GPU 与预算。"
+work = "复用 math_task.py：train[0:500]/val[500:1000]/test[1000:1500]、format/accuracy reward、math_verify、真实 train/eval/zero-shot；补多训练 seed 聚合及 export reload。"
+acceptance = "offline test + 真实 zero-shot/smoke/full；至少 3 个独立 train seeds，各自 held-out 评估，aggregate 与全新进程复载通过后才称 research baseline。"
+[[waves]]
+id = "wave2"
+label = "文本 SFT"
+dependencies = ["wave0", "wave1"]
+prerequisites = "wave1 的冻结/训练/评估/evidence 协议可复用且已验收。"
+work = "通用 SFT backbone；xLAM schema masker、FIM 切段打包、RapidFire 无泄漏 4 配置顺序编排（不宣称复现上游并发调度）。"
+acceptance = "gold 不进 prompt；assistant/FIM mask 与 token 对齐；源码/对话级 train/val/test 隔离；任务指标与同预算 3 seeds 对照、隔离代码执行评估。"
+[[waves]]
+id = "wave3"
+label = "视觉 SFT"
+dependencies = ["wave1", "wave2"]
+prerequisites = "文本 collator/packing、独立评估与 export reload 已验收，视觉 processor revision 冻结。"
+work = "两篇 ChartQA 因决策门/基座预训练污染判为原理性阻塞、不计入适配进度；Granite granite-linecomparison-v1 五维代码已齐备（图像内容 hash 三段隔离、显式 image_token_id + assistant-only 双层 mask、冻结 processor identity、held-out 逐题重算；granite_suite 三独立训练 seed 逐题内容重算与 Student-t95 聚合；granite_export 的 DoRA/4bit adapter-only 包与 HF offline 新进程复载），task_router 已精确注册，但全部只有 macOS ARM 离线合成证据、无 CUDA 实跑；PaliGemma bbox/loc round-trip/IoU 仍待实装。"
+acceptance = "图像 token 不参与语言损失；bbox round-trip/IoU；图像级去重；ChartQA 污染声明与未污染外部集；每篇独立 held-out 指标及复载回归；Granite 五维须先冻结 revision 与可安装镜像、授权 Linux CUDA 三 seed 实跑、基于实跑预声明容差并完成许可与业务验收，发布级按 task_router 精确分派、不借用其他任务协议。"
+[[waves]]
+id = "wave4"
+label = "DPO / MPO shared backbone"
+dependencies = ["wave2", "wave3"]
+prerequisites = "同一可用 SFT checkpoint、processor、偏好 split、reference 策略与预算冻结。"
+work = "文本/VLM preference collator、chosen/rejected mask、DoRA 与 frozen ref model；MPO sigmoid/bco_pair/sft 三损失装配与消融。"
+acceptance = "DPO vs MPO 必须 shared backbone，现有不同模型的两篇不能直接归因算法；beta/loss/权重显式配置，3 seeds 配对对照、ref 无梯度且复载等价。"
+[[waves]]
+id = "wave5"
+label = "vLLM / agent RL"
+dependencies = ["wave1", "wave3", "wave4"]
+prerequisites = "数学 reward 与视觉输入协议通过；多 seed 聚合、权重/checkpoint 身份追踪可用。"
+work = "同配置切换 use_vllm，验证 rollout 权重同步；Wordle 环境、会话回收与按词/对局隔离；VLM GRPO 单数 image 与预渲染 prompt。"
+acceptance = "vLLM on/off 除开关外同配置、记录同步步数与吞吐/显存/质量；异常/超时无会话泄漏；独立对局 solve-rate，VLM reward 失败关闭。"
+[[waves]]
+id = "wave6"
+label = "方法与模态扩展"
+dependencies = ["wave1", "wave2", "wave3", "wave4", "wave5"]
+prerequisites = "前序 shared backbone、数据冻结、聚合、复载协议全部验收；范围与许可单独审批。"
+work = "补 GSM8K 四 reward/完整超参/gold 剥离；按自动 family 缺口推进 KTO/RM/RLOO/online-DPO/GSPO/蒸馏/ORPO/CPO/GKD/prompt-tuning；CPT/DAPT、音视频另立模块。"
+acceptance = "每种方法有独立配方、offline tests、真实完成 evidence、3 seeds 对照与交付回归；未纳入 taxonomy 的模块先定契约，禁止用登记数宣称全生态覆盖。"
+
+[recipes."agent/grpo/wordle-openenv-hf-jobs"]
+wave = "wave5"
+data = { status = "missing", note = "缺 Wordle 环境和轨迹 schema、答案词/对局级 train/val/test 划分；在线生成不是无泄漏证明。" }
+train = { status = "missing", note = "缺 OpenEnv 交互 rollout、reward 与 trainer 桥接、超时/异常会话回收；HF Jobs/papermill 入口不算本仓实现。" }
+eval = { status = "missing", note = "缺独立词表/对局种子的 solve-rate、平均步数与非法动作评估。" }
+comparison = { status = "missing", note = "缺 zero-shot 同对局协议与 multi-training-seed aggregate、置信区间及成本对照。" }
+export = { status = "missing", note = "缺策略/环境版本打包、全新进程复载与对局回归。" }
+
+[recipes."llm/grpo/qwen2-0-5b-numinamath"]
+wave = "wave1"
+data = { status = "implemented", implementation = ["src/recipe_lab/math_task.py"], tests = ["tests/test_math_task.py"], note = "prepare_splits 真切分 source train[0:500]/val[500:1000]/test[1000:1500]；内容/问题跨 split 去重与 manifest；offline test 使用本地构造数据，真实数据/GPU 未测。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/math_task.py", "runner/train.py"], tests = ["tests/test_math_task.py"], note = "真实 GRPOConfig/GRPOTrainer、format_reward/accuracy_reward、math_verify；gold 解析错误拒绝执行；只支持纯文本全参数 math-grpo-v1；mock/offline test 不证明 GPU 成功。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/math_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_math_task.py"], note = "真实单 checkpoint held-out 与 base zero-shot 共用 prompt/test/greedy/seed；缺训练 checkpoint 不回退 base；拒绝用重复 decode 冒充训练多 seed；GPU 未测。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/suite_task.py", "src/recipe_lab/provenance.py", "runner/suite.py"], tests = ["tests/test_suite.py", "tests/test_provenance.py", "tests/test_baseline_evidence.py"], note = "至少3互异训练seed、共享基座且固定data/eval seed、隔离checkpoint、严格关联证据与指标重算、均值/样本方差/Student-t95区间；验收目标不自动回填，发布门禁共用强校验；offline通过，真实GPU多seed未测。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/export_task.py", "runner/export.py"], tests = ["tests/test_export.py"], note = "完整模型/tokenizer/配方/锁/参考预测打包、固定新进程offline重载复评、文件/身份/容差回归；C405内容复核且回滚单独确认。离线新Python进程测试仅注入依赖，未做GPU复载；需缓存数据，不是安装镜像，许可pending。" }
+
+[recipes."llm/grpo/qwen2-0-5b-vllm-colocate"]
+wave = "wave5"
+data = { status = "missing", note = "缺与数学样板共享的冻结索引/gold 隔离适配；同数据集名称不代表同配置划分。" }
+train = { status = "missing", note = "缺 use_vllm 同配置开关、colocate 装配、LoRA/权重同步与 rollout policy 身份验证；不能借用 math-grpo-v1 fallback。" }
+eval = { status = "missing", note = "缺同 checkpoint/test/采样参数的质量指标及吞吐、显存与同步滞后评估。" }
+comparison = { status = "missing", note = "缺只改变 vLLM 开关的同配置 on/off 对照与 3 train seeds 聚合，不能把两个配方名当消融。" }
+export = { status = "missing", note = "缺 adapter/base 合并或复载策略、vLLM/HF 输出一致性与权重同步回归。" }
+
+[recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
+wave = "wave6"
+data = { status = "missing", note = "缺 GSM8K #### gold 提取、从 prompt 剥 gold、训练/验证/官方 test 冻结与去重。" }
+train = { status = "missing", note = "缺 GSM8K 4 reward（match_format_exactly、match_format_approximately、check_answer_correctness、check_numbers_extraction）完整实装及权重/失败路径；完整 GRPO lr/beta/temperature/生成数/长度/batch/累积/steps/seeds 须显式冻结，不能只靠默认值；单题格式检查不算真实训练适配。" }
+eval = { status = "missing", note = "缺官方 test 数学 verifier、格式/长度/reward hacking 诊断与预测明细。" }
+comparison = { status = "missing", note = "缺四 reward 逐项消融、同预算 zero-shot/GRPO 和 multi-training-seed aggregate。" }
+export = { status = "missing", note = "缺模型、reward 配置、tokenizer 打包复载和官方 test 回归。" }
+
+[recipes."llm/sft/llama3-8b-xlam-function-calling"]
+wave = "wave2"
+data = { status = "implemented", implementation = ["src/recipe_lab/xlam_task.py"], tests = ["tests/test_xlam.py"], note = "一手数据卡字段 query/tools/answers 均按严格 JSON schema 校验：工具重名、answers.name 不在 tools、多余参数、缺 required、类型不符、未知列一律拒绝；规范化内容 hash 80/10/10 确定性划分，全局重复（含跨 split）拒绝，空划分不偷偷补救；test shared held-out 最多300条。自建协议非上游复现；真实 gated 数据、revision 冻结与 2024-07 重生成条目影响未验收，许可 research-only 且商业使用未确认。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/xlam_task.py", "src/recipe_lab/plan.py", "runner/train.py"], tests = ["tests/test_xlam.py"], note = "Trainer + 自建 completion-only collator：只对 <calls> 严格JSON数组 </calls> + EOS 计算 loss，prompt 部分 label=-100，分别编码避免边界合并；上游 SFTTrainer 把 gold 拼进 dataset_text_field 并对全文做损失，差异已登记。nf4/bf16/doublequant QLoRA、7 个 LoRA target 全匹配、base 冻结/trainable 非空、API signature 与实际应用值、预算 full150/smoke5、frozen lock/代码身份/adapter safetensors 张量值复载均校验。仅合成离线测试，无 GPU/真实数据实跑。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/xlam_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_xlam.py"], note = "held-out 单 checkpoint 与 base zero-shot 共用完整 tools prompt 与 greedy 协议；gold 不进生成输入；只用 json.loads 解析 <calls>，Python str(dict)/eval 注入文本一律拒绝，绝不执行生成的调用。json_parse_rate / schema_valid_rate / tool_call_exact_match / argument_f1 逐题重算；上游只有 3 条 do_sample 定性样例，无 held-out/指标。checkpoint 来源、recipe/fingerprint/锁/权重与逐题预测强绑定；发布级逐题重算器按task_router分派到xlam_suite.py，不用数学或FIM协议。未实现 pass@1 / 真实 API 执行正确率 / 隔离沙箱，GPU 未测，0 verified。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/xlam_suite.py", "src/recipe_lab/task_router.py", "runner/suite.py"], tests = ["tests/test_xlam_release.py", "tests/test_task_router.py"], note = "xlam-fc-v1专用三互异训练seed套件：共享冻结base与内容hash隔离held-out test、独立adapter checkpoint、逐题从raw query/tools/answers重建prompt与gold并重算四指标（不信任摘要分数）、均值/样本方差/SEM/Student-t95区间、配对增益；不回填expected/tolerance、不自动晋级B2。C306/C307按task_router精确分派，不借用数学1500题或FIM PSM协议。离线fake runtime证据只验内部一致性；真实CUDA三seed、同预算FIM/严格JSON输出协议消融、失败工具调用成本、许可与业务验收仍缺。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/xlam_export.py", "src/recipe_lab/task_router.py", "runner/export.py"], tests = ["tests/test_xlam_release.py", "tests/test_task_router.py"], note = "adapter-only导出包：冻结base revision/量化/eager/tokenizer identity、严格JSON输出协议与base_weights_bundled=false显式声明；配方快照逐字节保持训练内容身份，锁用虚拟锚点自包含；HF offline新进程真实调用xlam_task.run_evaluation复载复评，文件/身份/逐题输入/容差内容级复核，C405按任务分派。离线测试注入受控worker；无GPU复载，依赖缓存gated base与research-only数据，不是安装镜像，商业许可pending，隔离沙箱下真实API执行正确率仍缺。" }
+
+[recipes."llm/sft/rapidfire-multiconfig"]
+wave = "wave2"
+data = { status = "implemented", implementation = ["src/recipe_lab/rapidfire_task.py"], tests = ["tests/test_rapidfire.py"], note = "自建 rapidfire-sft-v1：Bitext 5 列严格 schema（flags/instruction/category/intent/response），未知列/空 gold 拒绝；规范化问题 hash 80/10/10 使同题所有生成变体落同一 split，规范化内容全局去重且拒绝跨 split 重复；空 split 拒绝。上游 train range(64)/eval range(50,60) 泄漏只作 [upstream] 元信息，不参与执行。真实 revision 与 26872 行数据未实测，数据卡未给 license。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/rapidfire_task.py", "runner/train.py", "src/recipe_lab/plan.py"], tests = ["tests/test_rapidfire.py"], note = "transformers.Trainer + completion-only collator 的 fp16 LoRA SFT（非上游未固定版本的 rapidfireai 并发调度）；4 组 lr×scheduler×rank/alpha/target_modules 由 [[configs]] 精确声明，config_recipe 只覆盖 train/peft/config_id/experiment_id 并逐配置隔离输出目录与证据；API signature/实际应用值、base 冻结、safetensors 张量复载、full=64/smoke=5 预算、锁与代码身份全绑定。顺序执行，不宣称 16-24× 加速复现；仅隔离离线合成证据，GPU 0 verified。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/rapidfire_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_rapidfire.py"], note = "同冻结 base/adapter/tokenizer/test 与单样本 greedy 协议，gold 不进 prompt，首个 EOS 截断；纯 Python 无 stemmer LCS ROUGE-L 与 exact_match 逐题重算（不引入未冻结 evaluate/rouge_score，数值与上游 use_stemmer=True 不可比）；checkpoint 来源、fingerprint、config_id、权重/预测/manifest 强绑定；base zero-shot 与训练 checkpoint 角色分离。上游从未报告任何定量数值；validation/test 评估 split 分离且绑定 eval_stage，C306/C307/C405 按 task_router 分派到 rapidfire_suite/rapidfire_export 的专用内容校验器，未知或冲突任务仍失败关闭。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/rapidfire_suite.py", "runner/suite.py"], tests = ["tests/test_rapidfire_release.py"], note = "rapidfire_suite.py 严格聚合 4 配置 × 至少 3 个互异独立训练 seed：逐题从 eval_manifest 的 raw instruction/response 重建 prompt 与 gold，纯 Python 无 stemmer ROUGE-L + exact_match 重算；只用 validation 的 paired 均值选配置（平局按 config_id 字典序），test 仅在选中配置上验收一次；均值/样本方差/SEM/Student-t95 与 sequential 时长/显存/步数成本对照，明确不宣称与上游并发吞吐可比；逐配置 checkpoint 的 recipe/fingerprint/code/lock/seed/config_id/权重/预测强校验。不回填 expected/tolerance、不自动晋级 B2；只有隔离离线合成证据，GPU 0 verified。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/rapidfire_export.py", "runner/export.py"], tests = ["tests/test_rapidfire_release.py"], note = "选中配置的 adapter-only fp16 LoRA 包：显式声明冻结 gpt2 base revision / tokenizer identity / eager / 无量化 / completion-only prompt 协议 / 无 stemmer ROUGE-L 不可比性 / base_weights_bundled=false / license pending；recipe-snapshot 与训练时 r.data 逐字节一致，锁用虚拟锚点自包含；HF offline 全新进程真实调用 rapidfire_task.run_evaluation 在 test split 复评，不复制 JSON 冒充复载。真实 recipe 未预声明 evaluation.export_tolerance 时 --full 失败关闭，不回填容差；只有受控 worker 离线证据，无 GPU 复载。" }
+
+[recipes."llm/sft/starcoder1b-fim"]
+wave = "wave2"
+data = { status = "implemented", implementation = ["src/recipe_lab/fim_task.py"], tests = ["tests/test_fim.py"], note = "repo_id/file_path/content严格schema，全源有限扫描与全局raw/normalized去重；repo哈希80/10/10隔离；PSM/SPM、special IDs、文件内分块padding与可重建mask/manifest。自建协议非上游复现，真实数据/许可/污染尚未验收。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/fim_task.py", "runner/train.py"], tests = ["tests/test_fim.py"], note = "显式Trainer+nf4/bf16/doublequant+LoRA，候选q_attn不强制，base冻结/非空trainable、预算full2000/smoke5及API/执行身份检查；独立文件causal-all-nonpadding，自建eager/no remote code；safetensors张量keys/shape/值复核；仅mock离线验证，无GPU证据。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/fim_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_fim.py", "tests/test_fim_release.py"], note = "同冻结base/adapter/量化/tokenizer/test窗口/PSM/greedy协议，gold不入input，首EOS/严格保留空白的文本与token exact match；completed checkpoint/权重来源校验，安全张量读取与复载值核对。发布级重算器按task_router分派到fim_suite，未知任务失败关闭。未实现pass@k/compile/sandbox隔离执行评估，exact match不执行代码；GPU未测，0 verified。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/fim_suite.py", "src/recipe_lab/task_router.py", "runner/suite.py"], tests = ["tests/test_fim_release.py", "tests/test_task_router.py"], note = "code-fim-v1专用三互异训练seed套件：共享base/zero-shot、隔离adapter checkpoint、固定repo隔离test与PSM/greedy协议、逐题输入/gold内容重算、均值/样本方差/Student-t95区间、不回填expected/tolerance、不自动晋级B2。离线fake runtime证据只验内部一致性；真实CUDA三seed、FIM on/off消融、许可证/重复代码偏差、GPU与业务验收仍缺。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/fim_export.py", "src/recipe_lab/task_router.py", "runner/export.py"], tests = ["tests/test_fim_release.py", "tests/test_task_router.py"], note = "adapter-only导出包：冻结base revision/量化/eager/tokenizer identity与base_weights_bundled=false显式声明，配方快照逐字节保持训练内容身份，包内锁用虚拟锚点自包含；HF offline新进程真实调用fim_task.run_evaluation复载复评，文件/身份/容差内容级复核，C405按任务分派。离线测试注入受控worker；无GPU复载，依赖缓存base与数据，不是安装镜像，许可pending，隔离代码执行回归仍缺。" }
+
+[recipes."vlm/dpo/smolvlm-rlaif-v"]
+wave = "wave4"
+data = { status = "missing", note = "缺图像偏好 chosen/rejected collator、共享 image processor、assistant mask 与图像级去重划分。" }
+train = { status = "missing", note = "缺 DPO 实装、显式 beta/loss/长度/学习率、DoRA 策略和 frozen ref model；不得擅自把原配方改成 DoRA 对照。" }
+eval = { status = "missing", note = "缺 held-out 偏好胜率/任务准确率、长度偏置与视觉一致性评估。" }
+comparison = { status = "missing", note = "缺与 MPO shared backbone/相同偏好 split、ref/DoRA/预算的配对 3 seeds 对照；原两篇模型不同不可直接归因方法。" }
+export = { status = "missing", note = "缺 policy adapter/base、processor、reference 配置打包复载与视觉偏好回归。" }
+
+[recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
+wave = "wave5"
+data = { status = "missing", note = "缺单数 image 列与 processor.apply_chat_template 预渲染字符串 prompt 的真实适配；图像/题目级冻结隔离。" }
+train = { status = "missing", note = "缺 VLM GRPO 视觉 rollout/PEFT/reward 实装；gold/prediction 解析失败关闭，不可借用纯文本数学路由。" }
+eval = { status = "missing", note = "缺图像 held-out 推理正确率、格式合规和失败预测明细。" }
+comparison = { status = "missing", note = "缺同图像/prompt/test 的 zero-shot、reward 消融及 3 train seeds aggregate。" }
+export = { status = "missing", note = "缺视觉 processor/image 输入协议与 adapter 打包复载、推理回归。" }
+
+[recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
+wave = "wave4"
+data = { status = "missing", note = "缺图像 preference collator 与 chosen/rejected/assistant mask，需和 DPO 共享冻结偏好 split。" }
+train = { status = "missing", note = "缺 sigmoid/bco_pair/sft 三损失与 [0.8,0.2,1.0] 权重实装、4bit/DoRA、reference 模型与显式精度校验。" }
+eval = { status = "missing", note = "缺三损失分量日志、偏好/视觉任务 held-out 指标与 ref/policy 分离检查。" }
+comparison = { status = "missing", note = "缺 shared backbone DPO vs MPO 与三损失消融、同 DoRA/预算的 3 seeds aggregate。" }
+export = { status = "missing", note = "缺 DoRA/4bit 复载兼容包与 processor、三损失配置追踪和指标回归。" }
+
+[recipes."vlm/sft/granite-vision-line-comparison"]
+wave = "wave3"
+data = { status = "implemented", implementation = ["src/recipe_lab/granite_task.py"], tests = ["tests/test_granite.py"], note = "自建 granite-linecomparison-v1 而非上游 notebook 复现：严格 4 列 schema + predicate=LineComparison 过滤；图像原始 mode + tobytes() 的 SHA256 做 80/10/10，同图所有问答变体同 split；规范化 (question,answer) 全局去重且拒绝跨 split 重复、空 split 拒绝、不随机补救；source_manifest 绑定 split_hashes / image_split_owner / data_seed / dataset revision 与内容 hash。上游只有 50/50 无 validation，本仓三段隔离不冒充上游结果。仅限离线合成图像对象验证，未加载真实 Geoperception、revision 与许可未确认。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/granite_task.py", "runner/train.py"], tests = ["tests/test_granite.py"], note = "普通 transformers.Trainer + 自建 collator（不用上游 SFTTrainer/skip_prepare_dataset）；prompt/full 两次 processor.apply_chat_template 编码并做 token 级前缀校验，gold 只在 full 序列、绝不进生成 prompt；显式 image_token_id 与 assistant span 外 token 双层 label=-100，padding/图像 placeholder 一律屏蔽；nf4/DoRA/bf16/eager、视觉塔跳过量化、动态筛 language_model+_proj 且命中非空，base 全冻结、safetensors adapter keys/shape/值严格复核；冻结 processor identity / seed / revision / 代码与锁字节，full=150 smoke=5。仅 fake runtime 离线验证，无 CUDA/GPU 实跑、无 completed 证据。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/granite_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_granite.py"], note = "held-out test 逐题 greedy + 首个 EOS 截断 + strip，exact_match / normalized_exact_match 逐题重算（NFKC+casefold+空白折叠），空生成不给分；eval_manifest 从 raw image/question/answer 重建 prompt 与 gold 并绑 processor identity / source_manifest hash；单 checkpoint greedy 不冒充训练多 seed 方差，zero-shot 只加载 base、训练评估必须有 completed checkpoint 且无 base fallback。指标只衡量文本一致性，不解释几何语义、不等于人工判分或业务验收；上游只有 test_idx=20 单样本定性，无数值可比。GPU 未测，0 verified。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/granite_suite.py", "runner/suite.py"], tests = ["tests/test_granite_release.py"], note = "三互异独立训练 seed 的 held-out 聚合：逐题从 eval_manifest 的 question/answer 重建 gold 并用 score_prediction 重算 exact_match / normalized_exact_match，不信任摘要分数；共享同图隔离的冻结 test 与 processor identity；均值/样本方差/SEM/Student-t95；不回填 expected/tolerance、不自动晋级 B2。指标只衡量文本一致性，不解释几何语义、不等于人工判分或业务验收。task_router 按精确 recipe_id 分派，不借用数学 1500 题 / FIM PSM / xLAM JSON / RapidFire ROUGE-L 协议。仅离线合成证据，GPU verified 0。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/granite_export.py", "runner/export.py"], tests = ["tests/test_granite_release.py"], note = "DoRA/4bit adapter-only 包：显式声明冻结 base/processor identity/chat template、显式 image_token_id + assistant-only 双层 mask、RGB 图像输入与 exact_match 协议、base_weights_bundled=false、generated_code_executed=false、license pending；recipe-snapshot.json 与训练时 effective_recipe 逐字节一致，锁用虚拟锚点自包含；HF offline 新进程真实调用 granite_task.run_evaluation 在 held-out 复载复评。真实 recipe 未预声明 export_tolerance，--full 失败关闭；Geoperception 与基座许可未确认。仅离线合成证据，GPU verified 0。" }
+
+[recipes."vlm/sft/paligemma2-refcoco-grounding"]
+wave = "wave3"
+data = { status = "implemented", implementation = ["src/recipe_lab/paligemma_task.py", "runner/train.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_paligemma.py"], note = "图像原始 mode+tobytes() SHA256 的 80/10/10 同图隔离、规范化(caption,bbox)全局去重与空 split 拒绝；coco_xywh→xyxy→1024 桶 <loc####> round-trip IoU 硬校验，非法/退化/越界框与 caption 注入拒绝；冻结原图 width/height，不做在线 resize/augmentation。仅离线合成证据。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/paligemma_task.py", "runner/train.py"], tests = ["tests/test_paligemma.py"], note = "普通 transformers.Trainer + 自建 completion-only collator（非 SFTTrainer）；prompt/prompt+suffix 两次 processor 编码并校验 token 级前缀；显式 image_token_id + suffix-only 双层 -100 mask；普通 LoRA（无 4bit/DoRA），冻结 processor identity、revision 与 8 个 target_modules。GPU verified 0。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/paligemma_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_paligemma.py"], note = "held-out 逐题 greedy + 首个 EOS 截断；严格单框 loc 反解，重算 bbox_iou / iou_at_0_5 / parse_rate / exact_match；gold 绝不进生成 prompt；zero-shot 只加载冻结 base、训练评估必须有 completed checkpoint 且无 base fallback。指标不冒充 mAP/AP 或业务验收，不执行生成代码。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/paligemma_suite.py", "runner/suite.py"], tests = ["tests/test_paligemma_release.py"], note = "三互异独立训练 seed 的 held-out 聚合；逐题从 eval_manifest 的 raw COCO bbox + 冻结宽高 + caption 重建 detection gold 与 xyxy，用 score_prediction 对 generated_text 重算四指标；均值/样本方差/SEM/Student-t95、paired delta；不回填 expected/tolerance、不自动晋级 B2。仅离线合成证据。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/paligemma_export.py", "runner/export.py"], tests = ["tests/test_paligemma_release.py"], note = "普通 LoRA adapter-only 包：冻结 base/processor identity、统一 prompt 模板、coco_xywh/xyxy/1024 桶 loc 协议、RGB 图像输入与单框 IoU 声明、base_weights_bundled=false、generated_code_executed=false、license pending；recipe-snapshot.json 与训练时 effective_recipe 逐字节一致，锁用虚拟锚点自包含；HF offline 新进程真实调用 paligemma_task.run_evaluation 复载复评。真实 recipe 未预声明 export_tolerance，--full 失败关闭；RefCOCO/COCO/Flickr 与基座许可未确认。" }
+
+[recipes."vlm/sft/qwen2-vl-7b-chartqa"]
+wave = "wave3"
+data = { status = "missing", note = "缺真实 ChartQA train/val/test 加载、图像级去重/污染检查、视觉 token mask 与数字答案规范化。" }
+train = { status = "missing", note = "缺 Qwen2-VL 4bit/LoRA（use_dora=false）与视觉 collator 适配；不能与 SmolVLM DoRA 混同。" }
+eval = { status = "missing", note = "缺 ChartQA relaxed accuracy、数字容差与 human/augmented 分组指标、未污染集验证。" }
+comparison = { status = "missing", note = "缺同 split/template zero-shot 与 3 train seeds 聚合；和 SmolVLM 的模型差异/污染必须独立说明。" }
+export = { status = "missing", note = "缺 Qwen2-VL 4bit/LoRA、processor 打包复载与 ChartQA 回归。" }
+
+[recipes."vlm/sft/smolvlm-chartqa"]
+wave = "wave3"
+data = { status = "missing", note = "缺真实 image/对话适配与切分；SmolVLM-Instruct 已接触 ChartQA 的仓内污染警告必须保留，需未污染外部集。" }
+train = { status = "missing", note = "缺 SmolVLM 4bit/DoRA（use_dora=true）装配与 assistant/image token mask；与 Qwen LoRA 分别验收。" }
+eval = { status = "missing", note = "缺 relaxed accuracy、human/augmented 分组与未污染集评估；ChartQA 分数只能作带污染声明的教学对照。" }
+comparison = { status = "missing", note = "缺 DoRA 消融和 3 train seeds 聚合；不得将已接触 ChartQA 的结果宣称无污染泛化或纯算法胜出。" }
+export = { status = "missing", note = "缺 SmolVLM 4bit/DoRA/processor 打包复载与未污染集指标回归。" }

@@ -1,0 +1,404 @@
+# 可复现性核查证据登记（2026-11-13）
+#
+# 本文件记录「实际核实到了什么」，与 recipe.toml 分离：
+#   recipe.toml 是配方，evidence.toml 是配方里每个值的出处与纠错历史。
+# 凡未能从一手材料确认的值，一律登记为 inferred/unverified，不当作事实。
+#
+# 覆盖范围：14/14 篇均回一手材料核对（3 篇本地原始 notebook + 11 篇上游页面事实抽取）。
+# 页面未提及的字段一律记为「未提及」，不推断 transformers / trl 的默认值。
+
+schema = 1
+assessed_at = "2026-11-13"
+
+[method]
+summary = "3 篇本地原始 notebook 逐行核查 + 11 篇上游页面事实抽取，覆盖全部 14 篇"
+rule = "只采信一手原文；页面未提及即记为未提及；总结类二手材料只作为线索，不作为证据"
+local_notebooks = [
+  "/tmp/hfcook/nb/fine_tuning_vlm_trl.txt",
+  "/tmp/hfcook/nb/fine_tuning_vlm_grpo_trl.txt",
+  "/tmp/hfcook/nb/fine_tuning_granite_vision_sft_trl.txt",
+]
+webfetch_pages = [
+  "fine_tuning_smol_vlm_sft_trl",
+  "fine_tuning_vlm_dpo_smolvlm_instruct",
+  "fine_tuning_vlm_mpo",
+  "fine_tuning_vlm_object_detection_grounding",
+  "function_calling_fine_tuning_llms_on_xlam",
+  "fine_tuning_code_llm_on_single_gpu",
+  "rapidfire_sft_multiconfig_training",
+  "grpo_agent_wordle_hf_jobs",
+  "grpo_vllm_online_training",
+  "fine_tuning_llm_grpo_trl",
+  "trl_grpo_reasoning_advanced_reward",
+]
+not_verified_pages = "无。14 篇全部回一手材料核对；但有 11 篇仅有网页抽取而非本地 .ipynb 原文，仍未逐字节校验代码单元格"
+coverage = "14/14"
+
+[fim_adapter_audit]
+assessed_at = "2026-11-13"
+sources = ["https://huggingface.co/learn/cookbook/fine_tuning_code_llm_on_single_gpu", "https://huggingface.co/datasets/smangrul/hf-stack-v1/raw/main/README.md", "https://huggingface.co/docs/peft/package_reference/peft_model"]
+primary_facts = "Cookbook使用Trainer、data_dir=data/split=train/streaming=True、PSM/SPM与rate=0.5、4bit nf4 bf16 double_quant、LoRA8/32/0候选c_proj,c_attn,q_attn,c_fc；数据卡字段repo_id/file_path/content/__index_level_0__，main卡5905条。未冻结revision，不以卡中行数认证真实输入。"
+local_deviations = "repo hash 80/10/10隔离，全局raw/规范化源码去重，文件内独立分块+padding，validation PSM，causal-all-nonpadding loss；eager/no remote code/no Hub push；重复c_proj去重且q_attn可未命中；held-out文本/token exact-match非pass@1。"
+limits = "数据卡未给许可，模型下载要求授权；GPU与真实数据未实测；suite/export与发布级重算器已按task_router实装但只有隔离离线合成证据，无真实CUDA三seed/GPU复载；repo隔离不证明预训练无污染。"
+
+[xlam_adapter_audit]
+assessed_at = "2026-11-13"
+sources = ["https://huggingface.co/learn/cookbook/function_calling_fine_tuning_llms_on_xlam", "https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k"]
+primary_facts = "数据卡列 query(str)/tools(JSON字符串数组)/answers(JSON字符串数组)；tools 元素 name,description,parameters{param:{type,description,required}}，answers 元素 name,arguments；60000 条，gated 须接受条款并登录，声明 research purposes only；2024-07 曾重生成 1896 条。Cookbook 用 load_dataset(..., split='train')，process_xlam_sample 把 query/tools/answers 拼成 <user>/<tools>/<calls> 整段 text，SFTConfig(dataset_text_field='text', max_length=2048, optim='adamw_8bit', remove_unused_columns=False)，SFTTrainer 对整段文本做损失，无 completion-only loss/response_template；推理 prompt 截断为 '<user>...</user>\\n\\n<tools>'（不含工具定义），generate_function_call 用 do_sample=True/temperature=0.7/max_new_tokens=512；展示输出形如 {'name': 'x', 'arguments': {...}} 的 Python str(dict) 单引号字面量，不是合法 JSON。上游无 seed/revision/eval_dataset/compute_metrics，只有 3 条定性样例；安装单元格整行注释，setup_hardware_config 运行时 os.system 动态装 flash_attn，from_pretrained 带 trust_remote_code=True。"
+local_deviations = "本仓 xlam-fc-v1 自建：transformers.Trainer + completion-only collator（仅 <calls> 严格JSON数组 </calls> + EOS 计 loss，prompt label=-100），给全 tools 定义，严格 JSON 输出且只用 json.loads 解析、绝不 eval 或执行生成调用；规范化内容 hash 80/10/10 + 全局去重、shared held-out、greedy、四个结构化指标、content fingerprint 绑定 xlam/upstream 协议段；eager attention、no remote code、no Hub push。LoRA target_modules 取上游原文 7 个；[quantization] nf4/bf16/double_quant 为本仓声明，页面未展示 bnb_config，不声称与上游一致。"
+limits = "上游无定量 held-out 指标，自建 json_parse/schema 合法率是格式与协议指标，不等于真实 API 执行正确率、pass@1 或业务安全；数据卡 gated 且 research-only，商业使用与再分发未确认；2024-07 重生成条目使未冻结 revision 的输入可漂移；基座 8B 需授权，GPU/真实数据/API 兼容/显存全未实测；comparison/export 与发布级逐题重算、adapter-only 导出、HF offline 新进程复载已实装并有隔离离线测试，但只有合成证据、无真实 CUDA 三 seed 与真实 GPU 复载，导出容差未在真实 recipe 预声明（--full 失败关闭）；B1 不晋级。"
+
+[rapidfire_adapter_audit]
+assessed_at = "2026-11-14"
+sources = ["https://huggingface.co/learn/cookbook/rapidfire_sft_multiconfig_training", "https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset"]
+primary_facts = "Cookbook用gpt2 + bitext/Bitext-customer-support-llm-chatbot-training-dataset；train_dataset=dataset['train'].select(range(64))、eval_dataset=select(range(50,60))（eval ⊂ train，数据泄漏）；train/eval均shuffle(seed=42)；sample_formatting_function生成'Question: {instruction}\\nAnswer: {response}'整段text；sample_compute_metrics把eval_preds的predictions/labels直接传给evaluate.load('rouge')且use_stemmer=True，异常静默返回{}，页面从未报告任何rougeL/loss数值。4组配置=2个lr/scheduler（5e-4/linear、2e-4/cosine+warmup_steps=10）×2个LoRA（r8/alpha16/c_attn、r32/alpha64/c_attn+c_proj，dropout=0.1/bias=none）；max_steps=64、batch=2、grad_accum=2、eval_steps=4、logging_steps=2、fp16、gradient_checkpointing、report_to=none；RapidFire AI调用Experiment/RFGridSearch/RFModelConfig/RFLoraConfig/RFSFTConfig/List，experiment.run_fit(..., num_chunks=4, seed=42)，另有rapidfireai init/start本地服务与InteractiveController。无model/dataset revision、无包版本（%pip install rapidfireai）、无set_seed/RFSFTConfig.seed/deterministic；页面只有16-24×吞吐宣传，不是训练指标。数据卡：26872条问答对，仅train split，5列flags/instruction/category/intent/response，27 intents；未给license（仅(c) Bitext Innovations, 2024），未给revision，语言为英文但未显式声明language元数据；category查看器显示11 values而卡片正文写10 categories，intent映射只列出20个。"
+local_deviations = "本仓rapidfire-sft-v1自建：按规范化问题hash(NFKC+casefold+空白折叠)做80/10/10三段不重叠划分，同题所有生成变体落同一split，全局拒绝规范化内容重复；prompt只到'Answer:'，Trainer+completion-only collator只对' {response}'+EOS计loss；评估为单样本greedy、首个EOS截断，纯Python无stemmer LCS ROUGE-L与exact_match，不引入未冻结版本的evaluate/rouge_score；4配置由[[configs]]精确声明并顺序执行，config_recipe只覆盖train/peft/config_id/experiment_id以隔离输出与证据；TrainingArguments/Trainer/PeftModel/LoraConfig/api参数显式核验，safetensors张量严格复载，fingerprint绑定rapidfire协议段/完整网格/config_id；训练右padding、eager/no remote code/no Hub push；full=64/smoke=5。"
+release_deviations = "发布级按ADR-019补齐：validation/test评估split分离并绑定eval_stage；rapidfire_suite.py做4配置×3互异独立训练seed严格聚合，逐题从eval_manifest的raw instruction/response重建prompt与gold并重算无stemmer ROUGE-L/exact_match，只用validation的paired均值选配置（平局按config_id字典序）、test只在选中配置上验收一次，输出均值/样本方差/SEM/Student-t95与顺序执行时长/显存/步数成本；rapidfire_export.py导出选中配置adapter-only包，HF offline新进程真实调用rapidfire_task.run_evaluation在test复评；task_router精确注册rapidfire-sft-v1的suite/export，C306/C307/C405分派到专用校验器，未知或冲突任务仍失败关闭。_identity_recipe剥离实跑后回填的expected/tolerance/execution.evidence，保留训练前预声明的export_tolerance，避免注册C307时与训练时effective_recipe.json内容身份失配；acceptance是阈值判定而非证据重算内容，验收由suite_problems用当前阈值独立判定，绝不采信JSON里自称的passed。"
+limits = "自建ROUGE-L与上游use_stemmer=True数值不可比，且上游从未报告任何数值；顺序执行不宣称复现rapidfireai并发调度或16-24×加速，成本对照明确upstream_throughput_comparable=false。真实model/dataset/source revision、完整CUDA环境锁、数据许可（卡片未给license）、商业使用与再分发权限全未确认；只有隔离tmp_path合成fake runtime证据，无GPU实跑、无真实completed证据、无真实三独立训练seed、无真实导出复载、无并发吞吐消融；真实recipe未预声明evaluation.export_tolerance，--full导出失败关闭，不回填容差，B1不晋级。ROUGE-L/exact_match只是文本格式指标，不证明客服业务正确或安全。"
+
+# ---------------------------------------------------------------- 跨篇共性发现
+
+[[findings]]
+id = "F01"
+severity = "blocker"
+summary = "依赖安装不可重放"
+evidence = '多篇为 !pip install -U -q git+https://github.com/huggingface/trl.git ...（无 commit、带 -U）；其余为 !pip install -U trl ... 或 %pip install rapidfireai（无任何版本约束）。唯一写进安装命令的精确 pin 是 MPO 篇的 qwen-vl-utils==0.0.8'
+consequence = "注释里的 # Tested with trl==0.14.0 只是作者当时的环境快照，不是可执行的安装指令；任何人重跑都会拿到不同的 trl"
+
+[[findings]]
+id = "F02"
+severity = "blocker"
+summary = "14 篇模型与数据集均无 revision 锁定"
+evidence = "全部 14 篇的 from_pretrained / load_dataset 调用均无 revision；上游页面同样标注「未提及」。唯一出现的 commit hash 是 code LLM 篇注释里的 Megatron-LM 参考链接，不是模型或数据集 revision"
+consequence = "Hub 权重或数据集更新会静默改变结果，且无法回溯到当时的版本"
+
+[[findings]]
+id = "F03"
+severity = "blocker"
+summary = "训练侧普遍无随机种子，但存在两个例外"
+evidence = "12 篇训练 config 无 seed / data_seed / deterministic。例外：code LLM 篇 SEED = 0 + set_seed(SEED) + shuffle(seed=SEED) + ConstantLengthDataset(seed=SEED)；RapidFire 篇 run_fit(..., seed=42) + train/eval_dataset.shuffle(seed=42)"
+consequence = "切分可复现但训练不可复现；配置里写 evaluation.seed=42 属于我们补的协议，不是上游已有事实。两篇例外也没有 deterministic / cudnn / tf32 策略与 TrainingArguments.seed，仍达不到 pinned"
+
+[[findings]]
+id = "F04"
+severity = "major"
+summary = "上游无执行入口"
+evidence = "14 篇均为 .ipynb / Colab notebook，依赖内核状态；GitHub 更新链接全部指向 notebooks/en/*.md，而非 .py 脚本"
+consequence = "即使参数齐全也无法一条命令重跑"
+
+[[findings]]
+id = "F05"
+severity = "major"
+summary = "评估普遍缺失，且「有 compute_metrics」不等于「评估有效」"
+evidence = "仅 RapidFire 篇有 sample_compute_metrics（ROUGE-L）；其余 13 篇无 compute_metrics / trainer.evaluate。advanced reward 篇仅有单题 expected_answer='72' 的格式检查；Wordle 篇是唯一有 solve rate / mean reward / reward delta 统计的一篇"
+consequence = "无法判定训练是否真的带来增益"
+
+[[findings]]
+id = "F06"
+severity = "major"
+summary = "reward 失败路径存在设计缺陷"
+evidence = '基础 GRPO 篇 accuracy_reward：if len(gold_parsed) != 0: ... except: 0.0 ; else: rewards.append(1.0) —— gold 答案解析失败时直接给满分'
+consequence = "数据质量问题会被当成模型答对，reward 曲线虚高；原配置写成「解析失败返回 None」与原文相反"
+
+[[findings]]
+id = "F07"
+severity = "major"
+summary = "VLM 图像列与 prompt 结构与我们的契约假设不同"
+evidence = 'VLM GRPO 篇 make_conversation 返回 {"prompt": <apply_chat_template 后的字符串>, "image": example["image"]}；顶层图像列是单数 image'
+consequence = "原配置写 images（复数）+ conversational 结构与上游不符；同时说明 R105 / R108 对 prompt-only VLM 过严，需在规范中注明例外"
+
+[[findings]]
+id = "F08"
+severity = "note"
+summary = "版本注释 ≠ 版本约束"
+evidence = 'vLLM 篇：# Tested with trl==0.23.1, peft==0.17.1, math_verify==0.8.0, vllm==0.11.0, trackio==0.5.2 transformers==4.57.0；基础 GRPO 篇：# Tested with transformers==4.47.1, trl==0.14.0, datasets==3.2.0, peft==0.14.0, accelerate==1.2.1, math_verify==0.3.3'
+consequence = "这些是可补入锁文件的线索，但在补齐前不能声称环境已锁定"
+
+[[findings]]
+id = "F09"
+severity = "blocker"
+summary = "xLAM 篇连安装命令都是注释，且在运行时动态装包"
+evidence = '安装单元格为 # !uv pip install --upgrade bitsandbytes peft trl python-dotenv（整行被注释）；setup_hardware_config() 内还有 os.system("pip install flash_attn --no-build-isolation")'
+consequence = "环境完全不可声明，更不可能锁定；页面虽给出 PyTorch 2.8.0+cu128 / H100 NVL 的运行快照，但那只是输出文本"
+
+[[findings]]
+id = "F10"
+severity = "major"
+summary = "code LLM 篇是唯一有真训练种子的一篇，但仍不完整"
+evidence = 'SEED = 0；from transformers import set_seed；set_seed(SEED)；train_data.shuffle(buffer_size=5000, seed=SEED)；ConstantLengthDataset(..., seed=SEED)；并保留前 4000 条为 validation'
+consequence = "这是 14 篇里最接近可复现的一篇；但 TrainingArguments 未显式传 seed，也没有 deterministic / cudnn / tf32 策略说明，按契约只能算 declared"
+
+[[findings]]
+id = "F11"
+severity = "major"
+summary = "RapidFire 是唯一有 compute_metrics 的一篇，但评估集与训练集完全重叠"
+evidence = 'train_dataset = dataset["train"].select(range(64))；eval_dataset = dataset["train"].select(range(50, 60))；shuffle(seed=42) 只改顺序不改成员；sample_compute_metrics 用 evaluate.load("rouge") 算 rougeL'
+consequence = "50–59 全部落在 0–63 内，ROUGE-L 数值是训练集内的记忆分数，不是泛化指标；页面也从未给出任何实际 loss / ROUGE-L 数值"
+
+[[findings]]
+id = "F12"
+severity = "major"
+summary = "grounding 篇训练与推理 prompt 模板确实不一致（一手确认）"
+evidence = "训练 collator：prompts.append(f\"<image>Detect {sample['caption']}.\") 且额外传 suffix=label_for_paligemma；推理：prompt = f\"<image>detect {caption}\" 无句号、无 suffix"
+consequence = "大小写、标点、标签注入三处不同；同时该篇确实有 train_test_split(test_size=0.2, seed=42, shuffle=False) 的 held-out 划分（此前记为「无 held-out」有误），但仍无定量指标"
+
+[[findings]]
+id = "F13"
+severity = "note"
+summary = "MPO 篇是唯一在安装命令中写出精确 pin 的一篇"
+evidence = "!pip install -U -q git+https://github.com/huggingface/trl.git bitsandbytes qwen-vl-utils==0.0.8；原文自承：需从源码安装 trl，因为 MPO trainer 当时尚未进入 official release"
+consequence = "qwen-vl-utils 可锁定，但 trl 仍指向 main 分支且无 commit；DPOConfig 里 bf16=False（与其它 VLM 篇相反）"
+
+[[findings]]
+id = "F14"
+severity = "major"
+summary = "VLM DPO 篇 DPOConfig 缺少关键算法参数"
+evidence = 'DPOConfig 全文只给了 batch/epochs/eval/save 等工程项；beta、loss_type、learning_rate、max_length、max_prompt_length 均为「未提及」'
+consequence = "DPO 的核心超参（beta / loss_type）依赖 TRL 0.12.2 默认值；一旦升级 trl 结果就会变，且无法从 recipe 文本还原"
+
+[[findings]]
+id = "F15"
+severity = "blocker"
+summary = "14 篇全部缺 source_sha，无法定位上游 notebook 漂移"
+evidence = "本仓库 14 篇 source_sha 全为空；上游页面「Update on GitHub」链接也不带 commit hash"
+consequence = "上游 recipe 修改后，我们无法判断本地记录对应的是哪一版，也无法做 diff"
+
+# ---------------------------------------------------------------- 事实纠错
+# was = 上一轮写入的错误值；now = 一手证据确认的值
+
+[[corrections]]
+recipe = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+field = "model.base"
+was = "Qwen2.5-VL-3B"
+now = "Qwen/Qwen2.5-VL-3B-Instruct"
+source = "local-notebook:fine_tuning_vlm_grpo_trl.txt"
+evidence = 'model_id = "Qwen/Qwen2.5-VL-3B-Instruct"'
+
+[[corrections]]
+recipe = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+field = "modality_contract.max_prompt_length"
+was = "512"
+now = "2048"
+source = "local-notebook:fine_tuning_vlm_grpo_trl.txt"
+evidence = "GRPOConfig(max_prompt_length=2048)"
+
+[[corrections]]
+recipe = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+field = "modality_contract.images_column / dataset.structure"
+was = "images / conversational"
+now = "image / standard（pre-rendered prompt）"
+source = "local-notebook:fine_tuning_vlm_grpo_trl.txt"
+evidence = 'return {"prompt": prompt, "image": example["image"]}；prompt 由 processor.apply_chat_template 预渲染为字符串'
+
+[[corrections]]
+recipe = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+field = "[train] num_generations / max_completion_length / learning_rate"
+was = "未记录（曾把 vLLM 篇的 8 / 512 串到此处）"
+now = "2 / 1024 / 1e-5"
+source = "local-notebook:fine_tuning_vlm_grpo_trl.txt"
+evidence = "GRPOConfig: num_generations=2, max_completion_length=1024, learning_rate=1e-5, per_device_train_batch_size=2, num_train_epochs=1"
+
+[[corrections]]
+recipe = "vlm/sft/granite-vision-line-comparison"
+field = "model.base"
+was = "granite-vision-3.1-2b"
+now = "ibm-granite/granite-vision-3.1-2b-preview"
+source = "local-notebook:fine_tuning_granite_vision_sft_trl.txt"
+evidence = 'model_id = "ibm-granite/granite-vision-3.1-2b-preview"'
+
+[[corrections]]
+recipe = "vlm/sft/granite-vision-line-comparison"
+field = "dataset.name"
+was = "Geoperception / LineComparison"
+now = "euclid-multimodal/Geoperception"
+source = "local-notebook:fine_tuning_granite_vision_sft_trl.txt"
+evidence = 'dataset_id = "euclid-multimodal/Geoperception"；LineComparison 是其子集名'
+
+[[corrections]]
+recipe = "vlm/sft/qwen2-vl-7b-chartqa"
+field = "dataset.split"
+was = "train[:10%]"
+now = "train[:10%] / val[:10%] / test[:10%]"
+source = "local-notebook:fine_tuning_vlm_trl.txt"
+evidence = "load_dataset(dataset_id, split=['train[:10%]', 'val[:10%]', 'test[:10%]'])"
+
+[[corrections]]
+recipe = "agent/grpo/wordle-openenv-hf-jobs"
+field = "model.base"
+was = "Qwen2.5-0.5B-Instruct"
+now = "Qwen/Qwen3-0.6B（显存 ≥24GB 时 Qwen/Qwen3-1.7B）"
+source = "webfetch:grpo_agent_wordle_hf_jobs"
+evidence = 'DEFAULT_MODEL = "Qwen/Qwen3-1.7B" if vram_gb >= 24 else "Qwen/Qwen3-0.6B"'
+note = "上一轮的值为编造，无任何一手依据"
+
+[[corrections]]
+recipe = "llm/grpo/qwen2-0-5b-vllm-colocate"
+field = "model.base / dataset.name"
+was = "Qwen2-0.5B / NuminaMath-TIR"
+now = "Qwen/Qwen2-0.5B-Instruct / AI-MO/NuminaMath-TIR"
+source = "webfetch:grpo_vllm_online_training"
+evidence = 'model_id = "Qwen/Qwen2-0.5B-Instruct" ; dataset_id = "AI-MO/NuminaMath-TIR"'
+
+[[corrections]]
+recipe = "llm/grpo/qwen2-0-5b-numinamath"
+field = "model.base / dataset.name / GRPOConfig"
+was = "Qwen2-0.5B / NuminaMath-TIR / 仅 trl=0.14.0"
+now = "Qwen/Qwen2-0.5B-Instruct / AI-MO/NuminaMath-TIR / max_completion_length=64, num_generations=4, grad_accum=16, lr=1e-5"
+source = "webfetch:fine_tuning_llm_grpo_trl"
+evidence = 'split=["train[:5%]", "test[:5%]"] ; # Tested with transformers==4.47.1, trl==0.14.0, datasets==3.2.0, peft==0.14.0, accelerate==1.2.1, math_verify==0.3.3'
+
+[[corrections]]
+recipe = "llm/grpo/qwen2-5-3b-advanced-reward"
+field = "model.base / dataset.name"
+was = "Qwen2.5-3B / GSM8K"
+now = "Qwen/Qwen2.5-3B-Instruct / openai/gsm8k (config=main, split=train)"
+source = "webfetch:trl_grpo_reasoning_advanced_reward"
+evidence = 'model_name = "Qwen/Qwen2.5-3B-Instruct" ; load_dataset("openai/gsm8k", "main", split="train")'
+
+# --- 本轮新增：7 篇原先只有二手描述的 recipe ---
+
+[[corrections]]
+recipe = "vlm/sft/smolvlm-chartqa"
+field = "peft.lora_alpha / [train] / [dependencies]"
+was = "lora_alpha = 16；只记录 bf16、r、alpha；无任何依赖版本"
+now = "lora_alpha = 8；SFTConfig: epochs=1, bs=4, grad_accum=4, warmup=50, lr=1e-4, max_length=None；测试版本 trl 0.22.0.dev0 / bnb 0.47.0 / peft 0.17.1 / qwen-vl-utils 0.0.11 / trackio 0.2.8"
+source = "webfetch:fine_tuning_smol_vlm_sft_trl"
+evidence = 'LoraConfig(r=8, lora_alpha=8, lora_dropout=0.1, use_dora=True, init_lora_weights="gaussian")；# Tested with trl==0.22.0.dev0, bitsandbytes==0.47.0, peft==0.17.1, qwen-vl-utils==0.0.11, trackio==0.2.8'
+
+[[corrections]]
+recipe = "vlm/sft/smolvlm-chartqa"
+field = "model.base（撤销推断标记）"
+was = "HuggingFaceTB/SmolVLM-Instruct（曾疑为 org 前缀是常识补全）"
+now = "HuggingFaceTB/SmolVLM-Instruct（一手确认，无误）"
+source = "webfetch:fine_tuning_smol_vlm_sft_trl"
+evidence = 'model_id = "HuggingFaceTB/SmolVLM-Instruct"'
+note = "原 unverified 条目已撤销"
+
+[[corrections]]
+recipe = "vlm/dpo/smolvlm-rlaif-v"
+field = "model.base / [dependencies] / DPOConfig"
+was = "SmolVLM-Instruct；仅 trl 0.12.2 + transformers 4.46.3"
+now = "HuggingFaceTB/SmolVLM-Instruct；6 个测试版本；DPOConfig: epochs=5, bs=1, grad_accum=32, eval_strategy=steps，beta / loss_type / lr / max_length 上游均未提及"
+source = "webfetch:fine_tuning_vlm_dpo_smolvlm_instruct"
+evidence = '# Tested with transformers==4.46.3, trl==0.12.2, datasets==3.2.0, bitsandbytes==0.45.0, peft==0.14.0, accelerate==1.2.0；dataset_id = "HuggingFaceH4/rlaif-v_formatted"，split=["train[:6%]", "test[:1%]"]'
+
+[[corrections]]
+recipe = "vlm/mpo/qwen2-5-vl-3b-mpo"
+field = "model.base / [train] / [dependencies]"
+was = "Qwen2.5-VL-3B；只记录组合损失，无训练超参、无依赖"
+now = "Qwen/Qwen2.5-VL-3B-Instruct；DPOConfig: loss_type=['sigmoid','bco_pair','sft'], loss_weights=[0.8,0.2,1.0], bf16=False, epochs=1, bs=4, grad_accum=8；安装命令唯一精确 pin qwen-vl-utils==0.0.8"
+source = "webfetch:fine_tuning_vlm_mpo"
+evidence = 'dataset_id = "HuggingFaceH4/rlaif-v_formatted"；split=["train[:5%]", "test[:1%]"]；!pip install -U -q git+https://github.com/huggingface/trl.git bitsandbytes qwen-vl-utils==0.0.8'
+
+[[corrections]]
+recipe = "vlm/sft/paligemma2-refcoco-grounding"
+field = "model.base / [train] / known_issues"
+was = "PaliGemma2-3b-pt-448；未录入训练配置；称「用训练集样本做首次验证」且无 held-out"
+now = "google/paligemma2-3b-pt-448；SFTConfig: lr=1e-5, epochs=2, bs=2, grad_accum=4, dataset_kwargs={skip_prepare_dataset:True}；确实有 train_test_split(test_size=0.2, seed=42, shuffle=False) 与 eval_dataset=val_dataset，但无定量指标"
+source = "webfetch:fine_tuning_vlm_object_detection_grounding"
+evidence = 'load_dataset("jxu124/refcoco", split="train[:5%]")；训练 prompt "<image>Detect {caption}." vs 推理 "<image>detect {caption}"'
+
+[[corrections]]
+recipe = "llm/sft/llama3-8b-xlam-function-calling"
+field = "model.base / dataset.name / [train]"
+was = "Llama-3-8B / xLAM-60k；未录入训练配置"
+now = "meta-llama/Meta-Llama-3-8B-Instruct / Salesforce/xlam-function-calling-60k；TrainingConfig 默认值 lr=1e-4, bs=16, grad_accum=8, max_steps=1000, max_seq_length=2048, lora_r=16, lora_alpha=16；SFTConfig(max_length=2048, optim=adamw_8bit)"
+source = "webfetch:function_calling_fine_tuning_llms_on_xlam"
+evidence = 'MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"；load_dataset("Salesforce/xlam-function-calling-60k", split="train")；安装单元格整行被注释'
+
+[[corrections]]
+recipe = "llm/sft/llama3-8b-xlam-function-calling"
+field = "[method] / [train] / [evaluation] / 数据协议"
+was = "method.trainer=SFTTrainer；[train] 为 TrainingConfig dataclass 默认值 max_steps=1000/max_seq_length=2048；evaluation 只有 function_call_exact_match + argument_f1；无 held-out 定量评估"
+now = "[method] 拆分 trainer=Trainer（本仓执行层）与 upstream_trainer=SFTTrainer（一手事实）；上游默认值移入 [upstream] 元信息段，[train] 为本仓自建 full=150/smoke=5 与 completion-only 参数；[evaluation] 增 max_new_tokens=256 与 json_parse_rate/schema_valid_rate/tool_call_exact_match/argument_f1 四个 held-out 指标；新增 [xlam]/[peft]/[quantization] 自建协议段并声明 gated/research-only 许可边界"
+source = "webfetch:function_calling_fine_tuning_llms_on_xlam + webfetch:Salesforce/xlam-function-calling-60k"
+evidence = '上游 SFTConfig(dataset_text_field="text") 对含 gold 的整段文本做损失；推理 prompt 为 "<user>...</user>\n\n<tools>"；输出为 Python str(dict)；数据卡 2024-07 重生成 1896 条且 gated research-only；上游无 eval_dataset/compute_metrics'
+
+[[corrections]]
+recipe = "llm/sft/starcoder1b-fim"
+field = "model.base / dataset.name / [train] / seed"
+was = "StarCoderBase-1B / hf-stack-v1；未录入训练配置；假定无 seed"
+now = "bigcode/starcoderbase-1b / smangrul/hf-stack-v1；SEED=0 + set_seed(SEED)；lr=5e-4, bs=16, max_steps=2000, seq_length=2048, FIM_RATE=0.5；上游用的是 transformers.Trainer 而非 SFTTrainer"
+source = "webfetch:fine_tuning_code_llm_on_single_gpu"
+evidence = 'valid_data = dataset.take(4000); train_data = dataset.skip(4000).shuffle(buffer_size=5000, seed=SEED)；trainer = Trainer(model=model, args=training_args, train_dataset=..., eval_dataset=...)'
+
+[[corrections]]
+recipe = "llm/sft/rapidfire-multiconfig"
+field = "dataset.name / [train] / evaluation / seed"
+was = "Bitext 客服数据；未录入配置网格；称「上游未报告 held-out 定量对照」"
+now = "bitext/Bitext-customer-support-llm-chatbot-training-dataset；4 组网格 lr=5e-4/2e-4 × r=8/32；有 sample_compute_metrics 计算 ROUGE-L；run_fit(..., seed=42)；但 eval_dataset=range(50,60) 落在 train_dataset=range(64) 内"
+source = "webfetch:rapidfire_sft_multiconfig_training"
+evidence = '%pip install rapidfireai（无版本）；train_dataset = dataset["train"].select(range(64))；eval_dataset = dataset["train"].select(range(50, 60))'
+
+# ---------------------------------------------------------------- 推断值处置
+
+[[unverified]]
+recipe = "agent/grpo/wordle-openenv-hf-jobs"
+field = "dependencies.trl"
+value = "1.7.0"
+reason = "上游安装命令 pip install -q trl ... 无任何版本约束；1.7.0 来自调研报告对 TRL v1 的描述，不是该 recipe 的实测版本"
+action = "移除该依赖声明，改列入 todo；同时从 [[compat.matrix]] 删除以该 recipe 为 source_recipe 的伪精确组合"
+
+[[unverified]]
+recipe = "agent/grpo/wordle-openenv-hf-jobs"
+field = "dependencies.transformers"
+value = "5.3.0"
+reason = "上游为 'transformers>=5.3.0' 浮动约束；5.3.0 是下界，从未被核实为实际运行版本"
+action = "移除精确 pin，改列入 todo"
+
+[[unverified]]
+recipe = "llm/grpo/qwen2-0-5b-vllm-colocate"
+field = "vllm.gpu_memory_utilization"
+value = "0.3"
+reason = "该值只出现在 GRPOConfig 的注释行 # vllm_gpu_memory_utilization=0.3（默认值说明），未作为显式实参传入"
+action = "保留但改名为 default_note，不再当作本 recipe 的显式配置"
+
+[[unverified]]
+recipe = "vlm/sft/qwen2-vl-7b-chartqa"
+field = "evaluation.seed"
+value = "42"
+reason = "上游 SFTConfig 无 seed；42 是本仓库要求的评估协议，不是上游已有事实"
+action = "保留但改记为 repro.seed_gap 的说明，明确区分「协议」与「已实现」"
+
+[[unverified]]
+recipe = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+field = "rewards.failure_path_note"
+value = "解析失败返回 None 而非 0"
+reason = "本地原文 accuracy_reward 用 try/except 令 gold_parsed=[] 并走归一化文本回退分支，完整分支未逐行复核"
+action = "改写为已核实部分 + 明确标注待复核分支"
+
+[[unverified]]
+recipe = "llm/sft/llama3-8b-xlam-function-calling"
+field = "training_config 默认值"
+value = "lr=1e-4, bs=16, max_steps=1000"
+reason = "这些是 dataclass 默认值，页面未展示实际运行时的 create_training_config(...) 调用参数，无法确认是否被覆盖"
+action = "录入为 defaults 并标注 derived-from-dataclass，不声称是实测超参"
+
+[[unverified]]
+recipe = "vlm/sft/smolvlm-chartqa"
+field = "hardware.vram_gb"
+value = "24"
+reason = "上游只写 'tested using a L4 GPU'，24GB 是按 L4 常见规格补全，不是原文数值"
+action = "改为 accelerator = L4 并删除推断的显存数值"
+
+[granite_vision_audit]
+assessed_at = "2026-11-14"
+sources = ["https://huggingface.co/learn/cookbook/fine_tuning_granite_vision_sft_trl"]
+primary_facts = "ibm-granite/granite-vision-3.1-2b-preview + euclid-multimodal/Geoperception；列 image/question/answer/predicate，只取 dataset['train'] 中 predicate=='LineComparison'，train_test_split(test_size=0.5, seed=42) 得 50/50 train/test，无 validation。format_data 拼 system/user(image+question)/assistant(answer) 三段。自定义 collate_fn 用 processor.apply_chat_template 与 processor(text=texts, images=[[image]], padding=True)，labels=input_ids.clone()，按 <|assistant|> token 序列启停 loss，遇 <|end_of_text|> 停；没有显式 image_token_id 屏蔽，image placeholder 只是因为位于 assistant 之前才被 mask。非 RGB 图像 convert('RGB')。BitsAndBytesConfig: nf4/double/bf16 + llm_int8_skip_modules=['vision_tower','lm_head'] + llm_int8_enable_fp32_cpu_offload=True。LoraConfig: r=8/alpha=8/dropout=0.1/use_dora=True/init_lora_weights='gaussian'，target_modules 为动态筛选命名含 language_model 且含 _proj 的模块。SFTConfig: epochs=1/bs=8/accum=2/warmup=10/lr=1e-4/wd=0.01/adamw_torch_fused/bf16/gradient_checkpointing=True/remove_unused_columns=False/dataset_text_field=''/dataset_kwargs={'skip_prepare_dataset': True}/report_to='none'；SFTTrainer processing_class=processor.tokenizer。FlashAttention is not installed，实际 _attn_implementation=None。"
+evaluation_facts = "无 eval_dataset / compute_metrics / evaluation_strategy，从未报告任何量化指标；训练前后都只对 test_idx=20 做单样本定性生成。第 5 节文字写用 ChartQA 测试，代码实际仍用 Geoperception 切出的 test_dataset，从未加载 ChartQA。文字称 'merge the LORA adapters'，代码只有 PeftModel.from_pretrained(model, output_dir)，没有 merge_and_unload()。无 model/dataset/processor revision，训练 config 无 seed/data_seed/deterministic（只有 train_test_split 的 seed=42）。"
+local_deviations = "已实装 granite-linecomparison-v1 自建协议五维（src/recipe_lab/granite_task.py + tests/test_granite.py 58 项、granite_suite.py / granite_export.py + tests/test_granite_release.py 44 项隔离离线测试），不冒充上游 notebook 复现：图像原始 mode + tobytes() 的 SHA256 做 80/10/10，同图所有问答变体同 split，规范化 (question,answer) 全局去重与跨 split 重复/空 split 拒绝；prompt/full 两次 apply_chat_template 并校验 token 级前缀，gold 只在 full 序列、绝不进生成 prompt；显式 image_token_id + assistant span 外 token 双层 label=-100；普通 Trainer 自建 collator（非 SFTTrainer/skip_prepare_dataset）；nf4/DoRA/bf16/eager、视觉塔跳过量化、动态筛 language_model+_proj 且命中非空；冻结 processor identity / seed / revision / 代码与锁字节；held-out 逐题 greedy + 首个 EOS 截断 + exact_match/normalized_exact_match 重算（NFKC+casefold+空白折叠），单 checkpoint greedy 不冒充训练多 seed 方差，zero-shot 只加载 base、训练评估必须有 completed checkpoint 且无 base fallback。发布级 comparison/export 按 ADR-022 补齐：granite_suite 三互异独立训练 seed 逐题从 eval_manifest 的 question/answer 重建 gold 并用 score_prediction 重算两指标、Student-t95 聚合，不回填 expected/tolerance；granite_export 导出 DoRA/4bit adapter-only 包（冻结 base/processor identity/chat template、显式双层 mask 声明、虚拟锚点锁、recipe-snapshot 内容身份），HF offline 新进程真实调用 granite_task.run_evaluation 在 held-out 复载复评。task_router 已按精确 recipe_id 注册 granite-linecomparison-v1，recipe 显式声明 execution.task_id，C306/C307/C405 按任务分派，不借用数学 1500 题 / FIM PSM / xLAM 严格 JSON / RapidFire ROUGE-L 协议；R103 的精确 recipe_id 白名单路径仍保留兼容。真实 recipe 未预声明 evaluation.export_tolerance，导出 --full 失败关闭。见 registry/feasibility.toml、ADR-020 / ADR-021 / ADR-022。"
+limits = "本条为 2026-11-14 回一手页面核查记录，不是 GPU 实跑证据；上游页面仍会漂移，source_sha 为空。五维实装只有 macOS ARM 上的隔离合成 fake runtime 离线验证与受控 worker 测试，未加载真实 Geoperception 或 torch/CUDA；model/dataset/processor revision、可安装镜像锁、依赖版本与数据/基座许可均未确认；evaluation.expected/tolerance/export_tolerance 未基于实跑预声明；无 completed evidence、GPU verified 0、B2+/B3 0、eligible 0/14。Granite 可行性由 partial_implementation 改判 pending_freeze 只反映五维代码齐备，不是 baseline 晋级。指标只衡量文本一致性，不解释几何语义，不等于人工判分或业务验收；与上游 test_idx=20 单样本定性生成无可比数值。"
+
+[paligemma_grounding_audit]
+assessed_at = "2026-11-16"
+sources = ["https://huggingface.co/learn/cookbook/fine_tuning_vlm_object_detection_grounding", "https://huggingface.co/datasets/jxu124/refcoco"]
+primary_facts = "google/paligemma2-3b-pt-448 + PaliGemmaProcessor.from_pretrained(model_id, use_fast=True) + jxu124/refcoco 的 split='train[:5%]'；图像由 Flickr URL 在运行时下载，captions 拆成单 caption 样本。页面正文称 bbox 为 xyxy，但训练代码 A.BboxParams(format='coco') 与 coco_to_xyxy() 明确按 COCO xywh 输入，可视化段又把 dataset bbox 直接当 xyxy 喂给 sv.Detections，三处口径不一致。标签协议为 1024 桶、4 位数字的 <loc####>，顺序 y1,x1,y2,x2，后接类别名，多条以 ' ; ' 分隔；页面没有 <seg###>/segmentation。训练 collator 拼 prompts.append(f\"<image>Detect {sample['caption']}.\") 并额外传 suffix=label_for_paligemma；推理却是 prompt = f\"<image>detect {caption}\"，大小写、句末句号、suffix 注入三处不一致。SFTConfig/SFTTrainer 用 skip_prepare_dataset 路线；labels=input_ids.clone() 只把 pad_token_id 与 <image> token 置为 -100，prompt 段也计 loss；无显式 completion-only mask。页面确实有 train_test_split(test_size=0.2, seed=42, shuffle=False) 的 held-out 划分（此前 F12 记为「无 held-out」已纠正），但 SFTConfig 虽写 eval_dataset/eval_strategy='steps'，却完全没有 compute_metrics、IoU、accuracy 或任何数值；只有 train[20] 与 val[13] 的单样本定性生成与可视化。fine-tuned 推理 do_sample=True 且无 generation seed；无 model/dataset/processor revision、无训练 seed、无包版本锁定（pip install -Uq ...）；基座 gated 需 token，页面注明 A100；未给 model/dataset/COCO/Flickr 的许可、商业使用与再分发条款。"
+local_deviations = "已实装 paligemma-grounding-v1 自建协议五维（src/recipe_lab/paligemma_task.py + tests/test_paligemma.py 46 项、paligemma_suite.py / paligemma_export.py + tests/test_paligemma_release.py 44 项隔离离线测试），不冒充上游 notebook 复现：IO 明确为 coco_xywh、内部统一 xyxy 并严格拒绝退化/越界/NaN 框；format_location 按 round(value*1024/max_value) 生成 4 位 <loc####> 并 clamp 到 1023，encode_detection 只产出单框，decode_detection 严格拒绝多框、';'、loc 数量不为 4、桶值越界与反向框；ROUND_TRIP_MIN_IOU=0.98（1024 桶量化约 1% 固有误差，但不丢框/不退化/不越界）。统一 PROMPT_TEMPLATE='<image>Detect {caption}.'，max_new_tokens=96（4 个 loc token 共 36 字符 + referring expression，64 会截断 caption 使 exact_match 恒为 0）。图像原始 mode+tobytes() SHA256 的 80/10/10 同图隔离、规范化 (caption,bbox) 全局去重、processor prompt/full 两次编码 token 级前缀校验、显式 image_token_id + completion-only 双层 label=-100；普通 transformers.Trainer 自建 collator，普通 LoRA 不用 4bit/DoRA/trl/bitsandbytes；冻结 processor identity / seed / revision / 代码与锁字节。held-out 逐题 greedy + 首个 EOS 截断，score_prediction 重算 bbox_iou/iou_at_0_5/parse_rate/exact_match，不执行生成代码。发布级 comparison/export 按 ADR-023 补齐：paligemma_suite 三互异独立训练 seed 从 eval_manifest 的 raw COCO bbox + 冻结 width/height + caption 重建 gold detection 与 xyxy，再对 generated_text 逐题重算四指标与 parsed bbox，Student-t95 聚合且不回填 expected/tolerance；paligemma_export 导出普通 LoRA adapter-only 包（冻结 base/processor identity、统一 prompt、loc 协议、RGB 图像输入、单框 IoU、base_weights_bundled=false、generated_code_executed=false、license pending、虚拟锚点锁、recipe-snapshot 内容身份），HF offline 新进程真实调用 paligemma_task.run_evaluation 复载复评。task_router 精确注册 paligemma-grounding-v1，recipe 显式声明 execution.task_id，C306/C307/C405 按任务分派，不借用 Granite 的 exact_match、数学 1500 题、FIM PSM、xLAM 严格 JSON 或 RapidFire ROUGE-L 协议；真实 recipe 未预声明 evaluation.export_tolerance，导出 --full 失败关闭。见 registry/feasibility.toml、ADR-023。"
+limits = "本条为 2026-11-16 回一手页面核查记录，不是 GPU 实跑证据；上游页面仍会漂移，source_sha / model.revision / dataset.revision 为空。五维实装只有 macOS ARM 上的隔离合成 fake runtime 离线验证与受控 worker 测试，未加载真实 PaliGemma2/RefCOCO 或 torch/CUDA；上游图像由 Flickr URL 运行时下载，必须先冻结静态副本。gated 基座授权与 RefCOCO/COCO/Flickr 的许可、商业使用与再分发权限全未确认；可安装镜像锁与依赖版本未冻结；evaluation.expected/tolerance/export_tolerance 未基于实跑预声明；无 completed evidence、GPU verified 0、B2+/B3 0、eligible 0/14。PaliGemma 可行性由 not_implemented 改判 pending_freeze 只反映五维代码齐备，不是 baseline 晋级。四指标只衡量单框定位一致性，不等于 mAP/AP、人工判分或业务验收；与上游单样本定性生成无可比数值。"
+
+[chartqa_baseline_feasibility]
+assessed_at = "2026-11-14"
+sources = ["https://huggingface.co/learn/cookbook/fine_tuning_vlm_trl", "https://huggingface.co/learn/cookbook/fine_tuning_smol_vlm_sft_trl"]
+primary_facts = "Qwen2-VL-7B ChartQA 起点篇上游第 6 节明确称 base model + 一句 system message 是 viable alternative to fine-tuning，微调只让输出格式变短；配方自身 decision.gate='blocked'、baseline.result='passes'。SmolVLM-Instruct 本就在 ChartQA 上训练过，作者自承是 educational exercise，不构成泛化验证；配方 upstream_deviations 写明若无法取得未污染 held-out 集只能作为教学对照。"
+decision = "两篇分别判定 blocked_zero_train 与 contaminated_pretraining，登记到 registry/feasibility.toml，并进入 baseline --min-state B2/B3 的硬门禁。这是原理性阻塞：补齐五维代码、CUDA 三 seed 实跑或 completed evidence 都不能解除，必须改写实验目标 / 换未污染外部集 / 重核一手材料后显式改写 verdict。"
+limits = "判定只针对「能否作泛化 baseline」，不否认这两篇作为教学/方法谱系索引的价值；wave3 实装改从 granite-vision-line-comparison 开始。"

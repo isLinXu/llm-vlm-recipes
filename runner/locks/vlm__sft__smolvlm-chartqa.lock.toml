@@ -1,0 +1,24 @@
+# baseline 锁定模板 · vlm/sft/smolvlm-chartqa
+# 由 scripts/apply_baseline_contract.py 生成。
+# 这不是已冻结的环境：在有网/有 GPU 环境跑 `runner/lock.py --apply` 固化。
+# 未解析到的字段保留 (未锁定)，不得手填猜测值。
+
+recipe_id = "vlm/sft/smolvlm-chartqa"
+experiment_id = "vlm-sft-smolvlm-chartqa-v1"
+model_id = "HuggingFaceTB/SmolVLM-Instruct"
+model_revision = "(未锁定)"
+dataset_id = "HuggingFaceM4/ChartQA"
+dataset_revision = "(未锁定)"
+source_sha = "(未锁定)"
+
+[dependencies]
+bitsandbytes = "0.47.0"
+peft = "0.17.1"
+qwen-vl-utils = "0.0.11"
+trackio = "0.2.8"
+trl = "0.22.0.dev0"
+
+python_cuda = "python>=3.11,<3.14; torch CUDA build; CUDA 12.x（约束声明，实测版本由 runner/lock.py --apply 写入 lock 文件）"
+determinism = "torch.use_deterministic_algorithms(True, warn_only=True); cudnn.deterministic=True; cudnn.benchmark=False; tf32=disabled; CUBLAS_WORKSPACE_CONFIG=:4096:8"
+
+# 实际运行时执行：pip freeze > runner/locks/vlm__sft__smolvlm-chartqa.freeze.txt

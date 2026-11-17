@@ -1,0 +1,25 @@
+# baseline 锁定模板 · llm/grpo/qwen2-0-5b-numinamath
+# 由 scripts/apply_baseline_contract.py 生成。
+# 这不是已冻结的环境：在有网/有 GPU 环境跑 `runner/lock.py --apply` 固化。
+# 未解析到的字段保留 (未锁定)，不得手填猜测值。
+
+recipe_id = "llm/grpo/qwen2-0-5b-numinamath"
+experiment_id = "llm-grpo-qwen2-0-5b-numinamath-v1"
+model_id = "Qwen/Qwen2-0.5B-Instruct"
+model_revision = "(未锁定)"
+dataset_id = "AI-MO/NuminaMath-TIR"
+dataset_revision = "(未锁定)"
+source_sha = "(未锁定)"
+
+[dependencies]
+accelerate = "1.2.1"
+datasets = "3.2.0"
+math_verify = "0.3.3"
+peft = "0.14.0"
+transformers = "4.47.1"
+trl = "0.14.0"
+
+python_cuda = "python>=3.11,<3.14; torch CUDA build; CUDA 12.x（约束声明，实测版本由 runner/lock.py --apply 写入 lock 文件）"
+determinism = "torch.use_deterministic_algorithms(True, warn_only=True); cudnn.deterministic=True; cudnn.benchmark=False; tf32=disabled; CUBLAS_WORKSPACE_CONFIG=:4096:8"
+
+# 实际运行时执行：pip freeze > runner/locks/llm__grpo__qwen2-0-5b-numinamath.freeze.txt

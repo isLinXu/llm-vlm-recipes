@@ -1,0 +1,152 @@
+# 可复现性契约：把「可复现」拆成八个可核查维度与五个等级。
+# 单一事实源；src/recipe_lab/repro.py 与 rules.py 的 L5 规则共同消费此文件。
+#
+# 核心立场：
+#   「记录了版本号」不等于「能装出这个版本」。
+#   上游大量使用 `pip install -U git+https://.../trl.git`（无 commit、强制升级）
+#   或 `pip install -U trl peft ...`（无任何版本约束），只在注释里写
+#   "# Tested with trl==0.14.0 ..."。那是作者当时的环境快照，不是可重放的指令。
+#   同理，`evaluation.seed` 若只写在配置里而训练代码没有 set_seed，等于没有。
+
+schema = 1
+assessed_at = "2026-11-13"
+
+states = ["missing", "declared", "pinned", "verified"]
+
+# R507 用：evidence_ref 必须能在本表中找到对应的一手材料登记。
+allowed_evidence_prefixes = ["local-notebook:", "webfetch:"]
+allowed_evidence_literals = ["research-report-only"]
+
+# R503 用：等级只能由八个维度算出来，recipe.toml 里的 repro.level 只是声明。
+reproducible_threshold = "L2"
+
+# ---------------------------------------------------------------- 等级
+# 等级由八个维度的最低达标情况决定，不允许手工虚报（R503 会重算并比对）。
+
+[levels.L0]
+label = "unspecified"
+description = "仅登记方法 / 模型 / 数据集名称，无法据此重建实验"
+requires = { provenance = "declared" }
+
+[levels.L1]
+label = "specified"
+description = "规格写清：参数、依赖、数据契约、评估协议、来源齐备，但均未锁定"
+requires = { model = "declared", data = "declared", params = "declared", env = "declared", eval = "declared", provenance = "declared" }
+
+[levels.L2]
+label = "pinned"
+description = "完全锁定：模型/数据 revision、依赖 lock + commit、训练种子、上游 commit"
+requires = { model = "pinned", data = "pinned", params = "pinned", env = "pinned", seed = "pinned", eval = "declared", provenance = "pinned" }
+
+[levels.L3]
+label = "executable"
+description = "可执行：在 L2 之上有确定入口命令、可构建环境、评估脚本，无需人工补代码"
+requires = { model = "pinned", data = "pinned", params = "pinned", env = "pinned", seed = "pinned", code = "pinned", eval = "pinned", provenance = "pinned" }
+
+[levels.L4]
+label = "verified"
+description = "已复现验证：在声明硬件上重跑，指标落在容差内，且有可复查 evidence 产物"
+requires = { model = "pinned", data = "pinned", params = "pinned", env = "pinned", seed = "pinned", code = "verified", eval = "verified", provenance = "pinned" }
+
+# ---------------------------------------------------------------- 维度
+
+[dimensions.code]
+label = "执行入口"
+evidence_field = "execution.entrypoint"
+pinned_requires = ["execution.entrypoint 指向真实存在的文件", "execution.command 给出确定命令"]
+verified_requires = ["入口在本仓库环境内实际执行成功并留有日志"]
+common_gap = "上游 14 篇均为 notebook；本仓库目前没有任何训练入口脚本"
+
+[dimensions.env]
+label = "环境与依赖"
+evidence_field = "execution.lockfile"
+pinned_requires = ["全部依赖精确到版本或 commit", "requirements.lock 或等价锁文件存在", "Python / CUDA / 驱动版本声明"]
+common_gap = "上游为 -U 无 pin 或 git+ 源码无 commit；测试版本仅出现在注释里"
+
+[dimensions.model]
+label = "基座模型"
+evidence_field = "model.revision"
+pinned_requires = ["model.base 为完整 repo id", "model.revision 锁定 commit", "权重校验和可选但推荐"]
+common_gap = "14 篇 from_pretrained 全部未传 revision，Hub 权重更新会静默改变结果"
+
+[dimensions.data]
+label = "数据集"
+evidence_field = "dataset.revision"
+pinned_requires = ["dataset.name 为完整 repo id", "dataset.revision 锁定 commit", "dataset.split 完整（含 train/eval/test）", "预处理代码与列契约确定"]
+common_gap = "14 篇 load_dataset 全部未传 revision；split 常被简写或省略 test"
+
+[dimensions.params]
+label = "训练超参"
+evidence_field = "train"
+pinned_requires = ["trainer config 全部非默认关键项已记录", "与上游原文逐项核对过"]
+common_gap = "本轮已按一手材料补齐 11 篇；仍缺 seed / 部分完整 trainer config"
+
+[dimensions.seed]
+label = "确定性"
+evidence_field = "train.seed"
+pinned_requires = ["train.seed 显式设置", "train.data_seed 显式设置", "deterministic / cudnn / tf32 策略声明"]
+common_gap = "12 篇训练 config 完全没有 seed；code LLM 与 RapidFire 两篇有 run-level seed 但无 deterministic 策略"
+
+[dimensions.eval]
+label = "评估闭环"
+evidence_field = "execution.eval_script"
+pinned_requires = ["execution.eval_script 存在", "指标定义与计算代码确定", "期望值与容差写入 evidence"]
+common_gap = "13 篇无 compute_metrics；唯一有 ROUGE-L 的 RapidFire 评估集与训练集重叠"
+
+[dimensions.provenance]
+label = "上游溯源"
+evidence_field = "source_sha"
+pinned_requires = ["source_sha 锁定上游 commit", "assessed_at 记录核查时间", "与上游的差异有 upstream_deviations"]
+common_gap = "14 篇 source_sha 全为空，上游 notebook 漂移后无法定位改动"
+
+# ---------------------------------------------------------------- 硬阻塞
+# 命中任一条件即不可能达到对应等级，用于生成报告里的「第一优先补齐项」。
+
+[[blockers]]
+id = "B01"
+dimension = "code"
+caps_level = "L2"
+condition = "无执行入口脚本"
+upstream_evidence = "14 篇上游均为 .ipynb，本仓库未提供 runner"
+
+[[blockers]]
+id = "B02"
+dimension = "env"
+caps_level = "L1"
+condition = "依赖为 git+ 无 commit 或 -U 无 pin"
+upstream_evidence = "14 篇中多篇为 pip install -U -q git+https://github.com/huggingface/trl.git（无 commit）；其余为 -U 无版本；唯一精确 pin 是 MPO 篇 qwen-vl-utils==0.0.8"
+
+[[blockers]]
+id = "B03"
+dimension = "seed"
+caps_level = "L1"
+condition = "训练 config 无 seed / data_seed / deterministic"
+upstream_evidence = "12 篇训练 config 无 seed；例外是 code LLM 篇 SEED=0 + set_seed 与 RapidFire 篇 run_fit(seed=42)，但两者均无 deterministic / cudnn / tf32 策略"
+
+[[blockers]]
+id = "B04"
+dimension = "model"
+caps_level = "L1"
+condition = "from_pretrained 无 revision"
+upstream_evidence = "14 篇全部「未提及」revision（3 篇本地原文 + 11 篇页面抽取）"
+
+[[blockers]]
+id = "B05"
+dimension = "data"
+caps_level = "L1"
+condition = "load_dataset 无 revision"
+upstream_evidence = "14 篇全部「未提及」revision（3 篇本地原文 + 11 篇页面抽取）"
+
+[[blockers]]
+id = "B06"
+dimension = "eval"
+caps_level = "L2"
+condition = "无 compute_metrics / 评估脚本 / 定量基线"
+upstream_evidence = "13 篇无 compute_metrics；唯一有 ROUGE-L 的 RapidFire 评估集 range(50,60) 落在训练集 range(64) 内；Wordle 篇有 solve rate 统计但无独立评估脚本"
+
+[[blockers]]
+id = "B07"
+dimension = "provenance"
+caps_level = "L2"
+condition = "source_sha 为空"
+upstream_evidence = "仓库 14 篇当前全部为空"
