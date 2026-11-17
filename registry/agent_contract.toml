@@ -116,7 +116,7 @@ purpose = "doctor + L0–L6 + 单测 + 五层审计 + dry-run 冒烟"
 id = "report"
 argv = ["make", "report"]
 expectation = "pass"
-purpose = "重建五份生成报告；随后必须检查 git diff --exit-code"
+purpose = "重建五份核心审计生成物与两份 Agent 交接视图；随后必须检查 git diff --exit-code"
 
 [[commands]]
 id = "handoff-check"

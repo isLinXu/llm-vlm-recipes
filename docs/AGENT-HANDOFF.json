@@ -35,7 +35,7 @@
       ],
       "expectation": "pass",
       "id": "report",
-      "purpose": "重建五份生成报告；随后必须检查 git diff --exit-code"
+      "purpose": "重建五份核心审计生成物与两份 Agent 交接视图；随后必须检查 git diff --exit-code"
     },
     {
       "argv": [

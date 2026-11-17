@@ -328,7 +328,7 @@ def render_markdown(root: Path, checked: ContractAudit) -> str:
         "## 标准工作流", "",
         "1. 先读 `AGENTS.md`，再看本页与 `AGENT-HANDOFF.json`。",
         "2. 只修改事实源：`registry/`、`recipes/`、`src/`、`tests/`；不要手改 `docs/` 下生成报告。",
-        "3. 运行 `make report` 重建五份报告，再运行 `recipe-lab handoff --check` 验证可重建性。",
+        "3. 运行 `make report` 重建五份核心审计生成物与两份 Agent 交接视图，再运行 `recipe-lab handoff --check` 验证可重建性。",
         "4. 运行 `make ci`；提升目标 `gate-*` 必须继续失败关闭。",
         "5. 没有用户明确要求，不要 push 或对外发布。", "",
         "## 事实源", "", "| path | purpose |", "| --- | --- |",

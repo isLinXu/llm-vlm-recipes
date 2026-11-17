@@ -19,7 +19,7 @@
 
 1. 先读 `AGENTS.md`，再看本页与 `AGENT-HANDOFF.json`。
 2. 只修改事实源：`registry/`、`recipes/`、`src/`、`tests/`；不要手改 `docs/` 下生成报告。
-3. 运行 `make report` 重建五份报告，再运行 `recipe-lab handoff --check` 验证可重建性。
+3. 运行 `make report` 重建五份核心审计生成物与两份 Agent 交接视图，再运行 `recipe-lab handoff --check` 验证可重建性。
 4. 运行 `make ci`；提升目标 `gate-*` 必须继续失败关闭。
 5. 没有用户明确要求，不要 push 或对外发布。
 
@@ -55,7 +55,7 @@
 | `doctor` | pass | `doctor` | 仓库根、tomllib、taxonomy 与 recipe.toml 可解析 |
 | `validate-l6` | pass | `validate --level l6` | L0–L6 契约校验；warning 是登记的待办风险，不阻塞 CI |
 | `ci` | pass | `make ci` | doctor + L0–L6 + 单测 + 五层审计 + dry-run 冒烟 |
-| `report` | pass | `make report` | 重建五份生成报告；随后必须检查 git diff --exit-code |
+| `report` | pass | `make report` | 重建五份核心审计生成物与两份 Agent 交接视图；随后必须检查 git diff --exit-code |
 | `handoff-check` | pass | `handoff --check` | 校验交接契约、生成物可重建性与门禁登记未漂移 |
 | `gate-b2` | fail_closed | `baseline --check --min-state B2` | 当前不得宣称任何篇达到 research-ready |
 | `gate-b3` | fail_closed | `baseline --check --min-state B3` | 当前不得宣称任何篇达到 business-ready |
