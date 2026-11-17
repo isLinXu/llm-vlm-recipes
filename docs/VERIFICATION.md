@@ -122,6 +122,18 @@ RLAIF-V `2404.14367`→`2405.17220`、RefCOCO `1604.07399` 实为宇宙射线模
 论文 benchmark 数字绝不回填本仓 expected/tolerance，文献背书不解锁 B2/B3。见
 [METHODOLOGY.md](METHODOLOGY.md)（生成）与 `tests/test_methodology.py`（35 项）。
 
+**能力方向另有一层**：`registry/mllm_post_training.toml` / `recipe-lab post-training`（ADR-025，第五层审计）
+按行为/能力把 14 篇映射到指令遵循、偏好校准、推理增强、领域自适应、可扩展学习五方向。
+五方向原始出处只能是 preprints 202607.1494 的摘要级框架（正文页受防护，仅索引与摘要交叉核实）；
+arXiv 2503.06072 只能作 `cross_check`，`Awesome-MLLM-Tuning` 只能作 `method_index`。
+`verification=readme` 的索引不得作方向出处，也不得支撑方法细节、benchmark 数值或本仓实测。
+`post-training --check` 校验五方向闭合、14 篇精确映射、primary/secondary 不重叠、
+实现状态从 `capabilities.toml` 重算，且 `blocked_zero_train` / `contaminated_pretraining`
+篇标为无效覆盖证据；`--min-fivedim-directions N` 才是提升目标。
+当前 4/5 方向有五维实现支撑，偏好校准为缺口；这不表示 DPO/RLAIF-V 已有 baseline。
+见 [MLLM-POST-TRAINING.md](MLLM-POST-TRAINING.md)（生成）与
+`tests/test_post_training.py`（27 项）。
+
 `G1 可引用` / `G2 可重放` / `G3 可对照` / `G4 可交付` 四组各带 `min_state`，
 `R603` 用同一个 `compute_state()` 重算并与 `baseline_contract.state` 比对，
 虚报即 error。B1 只代表「命令与参数确定、可以 dry-run」，**不代表跑通过一次**：
@@ -246,10 +258,11 @@ L6 全绿只证明**执行契约自洽 + 状态诚实**，不证明训练跑过�
 CI（`.github/workflows/validate.yml`）执行：
 `doctor` → `validate --level l6`（0 error，含 L5 + L6）→ `pytest` →
 `repro --check` + `baseline --check`（审计完整性）+ `capabilities --check`（五维覆盖）+
-`feasibility --check`（原理层）+ `methodology --check`（论文一手字段与引用闭合）→
+`feasibility --check`（原理层）+ `methodology --check`（论文一手字段与引用闭合）+
+`post-training --check`（方向层映射与来源边界）→
 三个 runner 入口的 dry-run 冒烟 → 重建 `docs/MATRIX.md`、
-`docs/REPRODUCIBILITY.md`、`docs/BASELINE-READINESS.md`、`docs/METHODOLOGY.md`
-并检查 `git diff --exit-code`，防止有人手改生成物。
+`docs/REPRODUCIBILITY.md`、`docs/BASELINE-READINESS.md`、`docs/METHODOLOGY.md`、
+`docs/MLLM-POST-TRAINING.md` 并检查 `git diff --exit-code`，防止有人手改生成物。
 
 `--strict` 留给**提升 `status` 之前**的复核，例如把某篇从 `ported` 推进到
 `smoke-passed` 时，先把该篇的 warning 清零：

@@ -547,6 +547,61 @@ def cmd_methodology(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def cmd_post_training(args: argparse.Namespace) -> int:
+    """MLLM 后训练方向层审计：五方向覆盖、来源边界与能力/可行性交叉。"""
+    from .post_training import audit, load, promotion_problems, render
+
+    root = _root()
+    recipes = load_recipes(root)
+    checked = audit(root, recipes)
+    if args.report is not None:
+        out = Path(args.report)
+        if not out.is_absolute():
+            out = root / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(render(root, recipes), encoding="utf-8")
+        print(f"已生成 {_display_path(out, root)}（{len(recipes)} 篇）")
+        if not args.check and not args.json and args.min_fivedim_directions is None:
+            return 0
+    if args.json:
+        print(json.dumps({
+            "assessed_at": load(root).get("assessed_at"),
+            "ok": checked.ok,
+            "errors": checked.errors,
+            "counts": checked.counts,
+            "sources": checked.sources,
+            "directions": checked.directions,
+            "coverage": checked.coverage,
+            "recipes": checked.rows,
+        }, ensure_ascii=False, indent=2))
+    elif args.report is None:
+        c = checked.counts
+        print(f"MLLM 后训练方向：{c.get('directions', 0)} 个方向，映射 "
+              f"{c.get('recipes', 0)}/{c.get('total', 0)} 篇，来源 {c.get('sources', 0)} 条，"
+              f"登记错误 {len(checked.errors)}")
+        for did in sorted(checked.coverage):
+            row = checked.coverage[did]
+            print(f"  {did}: 主方向 {row['primary_count']} 篇 / 五维实现 "
+                  f"{row['implemented_count']} 篇 / {'缺口' if row['gap'] else '有支撑'}")
+    failures = list(checked.errors)
+    if args.min_fivedim_directions is not None:
+        failures.extend(promotion_problems(checked, args.min_fivedim_directions))
+    if not args.json:
+        print(f"\nrecipe-lab post-training --check · {len(recipes)} 篇")
+        print(f"  登记完整性：{'通过' if checked.ok else '未通过'}；"
+              f"有五维实现支撑的方向 {checked.counts.get('implemented_directions', 0)}/"
+              f"{checked.counts.get('directions', 0)}；缺口 {checked.counts.get('gap_directions', 0)}")
+        if not args.min_fivedim_directions:
+            print("  --check 只校验登记闭合与来源边界；提升目标请用 --min-fivedim-directions N")
+        if failures:
+            print("方向层登记未通过：")
+            for line in failures:
+                print("  [FAIL] " + line)
+        else:
+            print("  [ok] 14 篇精确映射，五方向闭合，来源边界与能力/可行性交叉通过")
+    return 1 if failures else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="recipe-lab", description="LLM/VLM recipe 登记与验证")
     p.add_argument("--version", action="version", version=f"recipe-lab {__version__}")
@@ -636,6 +691,15 @@ def build_parser() -> argparse.ArgumentParser:
                      metavar="PATH", help="生成 Markdown 方法论报告")
     pm2.add_argument("--json", action="store_true")
     pm2.set_defaults(func=cmd_methodology)
+
+    pt = sub.add_parser("post-training", help="MLLM 后训练五方向覆盖与来源边界审计")
+    pt.add_argument("--check", action="store_true", help="校验登记闭合与来源边界")
+    pt.add_argument("--min-fivedim-directions", type=int, default=None, metavar="N",
+                    help="额外要求至少 N 个方向有五维实现支撑（提升目标）")
+    pt.add_argument("--report", nargs="?", const="docs/MLLM-POST-TRAINING.md", default=None,
+                    metavar="PATH", help="生成 Markdown 方向覆盖报告")
+    pt.add_argument("--json", action="store_true")
+    pt.set_defaults(func=cmd_post_training)
     return p
 
 

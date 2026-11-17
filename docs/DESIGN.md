@@ -402,6 +402,16 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 
 ---
 
+## ADR-025 — 新增 MLLM 后训练方向层：按能力方向映射训练工作，而非按参数机制
+
+- 背景：用户给出三个来源与一套「MLLM 后训练五方向」提纲。一手核查发现三者不是同一套 taxonomy：preprints 202607.1494（*A Survey on Post-Training of Multimodal Large Language Models*，Zhang 等，2026-07-21，DOI `10.20944/preprints202607.1494.v1`）摘要明确给出 instruction following / preference calibration / reasoning enhancement / domain adaptation / scalable training（v2 作 scalable learning）；arXiv 2503.06072 是 LLM PoLM 五范式（Fine-tuning / Alignment / Reasoning / Efficiency / Integration and Adaptation），不是 MLLM 五方向原始出处；`WenkeHuang/Awesome-MLLM-Tuning` 的顶层分类是 Selective / Additive / Reparameterization Tuning，和方法/行为方向不同轴，且没有统一可复现配置。若混用会把二手提纲误写成原文事实，也会用方法索引冒充复现证据。
+- 决策一（第五层审计）：新增 `registry/mllm_post_training.toml` 与 `src/recipe_lab/post_training.py`，回答「训练工作覆盖 MLLM 后训练哪个能力方向、缺口在哪」。它与前四层互不替代，任何一层通过都不解锁 GPU 晋级或 B2/B3。`post-training --check` 校验来源边界、五方向闭合、14 篇精确映射和能力/可行性交叉；`--min-fivedim-directions N` 是提升目标。
+- 决策二（来源分级）：`verification` 分为 `abstract_and_index` / `abstract` / `readme`。MLLM 综述只能作方向原始出处，且必须保留「正文被 Akamai 防护，仅标题/作者/日期/DOI/摘要经索引交叉核实」的边界；LLM 综述只能作 `cross_check`；Awesome repo 只能作 `method_index`。readme 级索引不得作方向出处；任何来源都不得支撑方法细节、benchmark 数值、本仓 expected/tolerance 或 GPU 实测。
+- 决策三（映射与缺口）：14 篇逐篇登记 `primary` / `secondary` / `rationale`；primary 必须非空且与 secondary 不重叠；每个方向至少有一篇 primary 映射。实现状态从 `capabilities.toml` 重算，不采信本登记自称；`blocked_zero_train` 与 `contaminated_pretraining` 篇显式标为无效覆盖证据，不能靠数量掩盖原理性阻塞。当前 4/5 方向有五维实现支撑，唯一缺口是 `preference_calibration`。
+- 验证与边界：`tests/test_post_training.py`（27 项）覆盖来源越权、方向缺失、映射缺口、枚举/计数错误、禁止宣称、能力/可行性漂移与 CLI 行为。该层只做覆盖地图，不表示 DPO/RLAIF-V 已有 baseline，不表示论文中的具体方法已在本仓实现或实测。GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 全部未变。
+
+---
+
 ## recipe.toml 字段规范
 
 | 段 | 关键字段 | 必需性 | 相关规则 |

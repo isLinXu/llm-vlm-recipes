@@ -17,6 +17,7 @@
 | CUDA GPU 实跑证据 | 0 篇；未下载真实模型/数据，未确认框架兼容或训练效果 |
 | 原理上可作 baseline | **eligible 0/14**；pending_freeze 6、not_implemented 6、`blocked_zero_train` 1、`contaminated_pretraining` 1（见 `make feasibility-check`） |
 | 方法论依据 | 14 篇逐篇绑定 practice 论文一手结论：20 篇一手核实 / 3 篇未核实仅作补充、24 条主张、10 条编号更正（见 `make methodology-check`、`METHODOLOGY.md`）。论文依据不解锁 GPU 晋级 |
+| MLLM 后训练方向 | 第五层审计：按指令遵循 / 偏好校准 / 推理增强 / 领域自适应 / 可扩展学习五方向映射 14 篇；4/5 方向有五维实现支撑，偏好校准为缺口（见 `make post-training-check`、`MLLM-POST-TRAINING.md`） |
 | 声明就绪状态 | B1 declared 14 篇；**research-ready B2+ 0 篇、business-ready B3 0 篇** |
 | 上游实验可复现性 | L0 8 / L1 6 / L2+ 0；没有确认任何篇达到完全锁定 |
 
@@ -58,9 +59,23 @@ make methodology-check                                    # 14 篇覆盖 + 一�
 PYTHONPATH=src python3 -m recipe_lab methodology --min-verified-papers 99  # 提升目标示例
 ```
 
+再上一层是 **MLLM 后训练方向层**（第五层审计）：按行为/能力把训练工作映射到
+指令遵循、偏好校准、推理增强、领域自适应、可扩展学习五方向，登记在
+`registry/mllm_post_training.toml`。五方向原始出处是 preprints 202607.1494 的摘要级框架；
+arXiv 2503.06072 只做跨域交叉印证，`Awesome-MLLM-Tuning` 只做不同轴的方法索引，
+二者都不当五方向来源或复现证据。实现状态从 `capabilities.toml` 重算，
+`blocked_zero_train` / `contaminated_pretraining` 篇显式标为无效覆盖证据。
+当前 4/5 方向有五维实现支撑，**偏好校准是缺口**，不表示 DPO/RLAIF-V 已有 baseline。
+
+```bash
+make post-training-check                                        # 五方向闭合 + 14 篇映射 + 来源边界
+PYTHONPATH=src python3 -m recipe_lab post-training --min-fivedim-directions 5  # 当前必须失败
+```
+
 完整的14篇五维矩阵、各篇具体缺失、方法覆盖边界、wave0–wave6依赖和验收：
 **[BASELINE-READINESS.md](docs/BASELINE-READINESS.md)**。
 方法论依据与一手论文核查：**[METHODOLOGY.md](docs/METHODOLOGY.md)**。
+MLLM 后训练五方向与 14 篇映射：**[MLLM-POST-TRAINING.md](docs/MLLM-POST-TRAINING.md)**。
 历史一手审计：**[REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md)**。
 
 ## 快速验证（无 GPU、无训练依赖）
@@ -71,7 +86,8 @@ PYTHONPATH=src python3 -m recipe_lab methodology --min-verified-papers 99  # 提
 make ci                      # 结构/契约、审计完整性、能力矩阵、方法论依据与离线测试
 make capabilities-check      # 精确14篇覆盖、文件证据与合法能力状态
 make methodology-check       # 论文一手字段、引用闭合、边界声明与阻塞篇交叉校验
-make report                  # 重建 MATRIX / REPRODUCIBILITY / BASELINE-READINESS / METHODOLOGY
+make post-training-check     # MLLM 后训练五方向映射、来源边界与能力/可行性交叉
+make report                  # 重建 MATRIX / REPRODUCIBILITY / BASELINE-READINESS / METHODOLOGY / MLLM-POST-TRAINING
 make baseline-dry-run        # 输出14篇声明；不运行训练，不产生实跑证据
 PYTHONPATH=src python3 -m recipe_lab capabilities --json
 ```
@@ -262,6 +278,7 @@ python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --dry-ru
 | 实际五维能力 | 哪些任务逻辑已实现、已实跑？ | `capabilities.toml`，`capabilities` |
 | 可行性判定 | 实验目标是否成立、数据是否污染？ | `feasibility.toml`，`feasibility` |
 | 方法论依据 | 这么设计依据哪篇论文的一手结论？ | `methodology.toml`，`methodology` |
+| MLLM 后训练方向 | 训练工作覆盖哪个能力方向、缺口在哪？ | `mllm_post_training.toml`，`post-training` |
 
 `status`的cataloged→ported→smoke-passed→benchmarked只记录配方维护进展，不替代上述审计。
 复现上游实验与自建baseline可以不同，但后者必须公开声明差异并冻结、实测。
@@ -269,7 +286,7 @@ python3 runner/train.py --recipe vlm/sft/granite-vision-line-comparison --dry-ru
 ## 关键目录
 
 ```text
-registry/                    taxonomy、reproducibility、baseline、capabilities、feasibility、methodology、一手evidence
+registry/                    taxonomy、reproducibility、baseline、capabilities、feasibility、methodology、mllm_post_training、一手evidence
 recipes/**/recipe.toml        14篇配方；所有来源与自建差异显式登记
 src/recipe_lab/               审计/CLI、plan、math_task、baseline_evidence、capabilities、feasibility、methodology
 runner/                      train / eval / zero_shot / lock / suite / export；说明见runner/README.md
@@ -279,6 +296,7 @@ tests/                       纯函数、mock、结构集成、正反向证据�
 scripts/                     一次性迁移、来源漂移辅助；重跑不能覆盖已有配置/锁
 docs/BASELINE-READINESS.md   就绪、实际能力、缺口、实施依赖及验收（生成）
 docs/METHODOLOGY.md          逐篇方法论依据、一手论文核查与编号更正（生成）
+docs/MLLM-POST-TRAINING.md   MLLM 后训练五方向、来源边界与 14 篇映射（生成）
 docs/REPRODUCIBILITY.md      历史上游可复现性审计（生成）
 docs/MATRIX.md               全量配方索引（生成）
 docs/DESIGN.md              架构决策、证据检查边界

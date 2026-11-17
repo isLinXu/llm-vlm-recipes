@@ -16,7 +16,7 @@
 | 07（延伸） | 「每篇都能当 baseline」 | `registry/baseline.toml` + `runner/` + `src/recipe_lab/plan.py` + `BASELINE-READINESS.md` 的 P0–P4 路径 + `docs/DESIGN.md` ADR-010 / ADR-011 |
 | 08 陷阱清单 | 20+ 条具体问题 | `TRAPS.md` + 各篇 `[known_issues]` + 审计新增 F09–F15、基线阶段 F16–F18 |
 | 09 选型决策树 | Q0–Q3、四阶段实验 | `README.md` 状态机 + `R302` 决策门 |
-| 10 参考资源 | 链接索引 | 本文件下表；practice 论文方法论另见 `registry/methodology.toml` / `METHODOLOGY.md`（ADR-024） |
+| 10 参考资源 | 链接索引 | 本文件下表；practice 论文方法论见 `registry/methodology.toml` / `METHODOLOGY.md`（ADR-024）；MLLM 后训练五方向见 `registry/mllm_post_training.toml` / `MLLM-POST-TRAINING.md`（ADR-025） |
 
 ---
 
@@ -76,6 +76,15 @@
   本轮核查实际发现并更正 10 条凭记忆写错的编号（FIM、RLAIF-V、RefCOCO、数据污染等），
   登记在 `[[corrections]]` 的 `was → now`，见 [METHODOLOGY.md](METHODOLOGY.md)。
   论文的 benchmark 数字不写进 recipe 的 `evaluation.expected/tolerance`，也不冒充本仓实测。
+
+- **MLLM 后训练方向（ADR-025）**：`registry/mllm_post_training.toml` 把 14 篇映射到
+  指令遵循 / 偏好校准 / 推理增强 / 领域自适应 / 可扩展学习五方向。一手核查确认用户提纲
+  来自 preprints 202607.1494 摘要（正文页受防护，只做摘要 + 索引级核实）；
+  arXiv 2503.06072 是 LLM 后训练五范式的跨域交叉印证，
+  `WenkeHuang/Awesome-MLLM-Tuning` 的 Selective / Additive / Reparameterization 是不同轴的方法索引。
+  三者边界分别登记，索引或交叉印证来源不得冒充五方向原始出处或复现证据；
+  实现状态从 `capabilities.toml` 重算，原理性阻塞篇标为无效覆盖证据。
+  见 [MLLM-POST-TRAINING.md](MLLM-POST-TRAINING.md)。
 
 `confidence` 字段目前 14 篇全为 `primary`；若后续引入社区 benchmark 数字，
 应显式降为 `secondary`。

@@ -1,0 +1,177 @@
+# MLLM 后训练方向层：按「行为/能力塑造」而非「参数/结构」分类训练工作。
+# 单一事实源：本文件。来源边界与 14 篇映射都在此登记，报告由 CLI 生成。
+# 与 methodology.toml 不同：本层允许 abstract_and_index / readme 级来源，
+# 但严格限制其可支撑的声明范围，不能冒充全文核实或本仓实测。
+
+schema = 1
+assessed_at = "2026-11-17"
+expected_recipe_count = 14
+expected_direction_count = 5
+registry = "registry/mllm_post_training.toml"
+
+[integrity]
+allowed_verification = ["abstract_and_index", "abstract", "readme"]
+allowed_supports = ["paper_supports", "we_adapted", "index_only"]
+allowed_used_for = ["directions", "cross_check", "method_index"]
+coverage_scope = ["primary", "secondary"]
+forbidden_claim_phrases = [
+  "已在本仓 GPU 验证",
+  "本仓 expected =",
+  "复现论文分数",
+  "达到 B2",
+  "达到 B3",
+]
+
+# -------------------------------------------------------------------------
+# 来源：严格区分这是五方向原始出处、跨域交叉印证，还是方法索引。
+# -------------------------------------------------------------------------
+[sources.mllm_post_training_survey]
+kind = "survey"
+title = "A Survey on Post-Training of Multimodal Large Language Models"
+year = 2026
+date = "2026-07-21"
+url = "https://www.preprints.org/manuscript/202607.1494"
+doi = "10.20944/preprints202607.1494.v1"
+verification = "abstract_and_index"
+core_claim = "摘要明确按行为塑造视角把 MLLM 后训练分为五类：instruction following、preference calibration、reasoning enhancement、domain adaptation、scalable training（v2 摘要作 scalable learning）。"
+boundary = "正文页被 Akamai 防护；仅标题、作者、日期、DOI 与摘要由 preprints 索引及 Google Scholar/Scilit 交叉核实。不得支撑具体方法细节、论文内数值、benchmark 结论或本仓实测。"
+used_for = ["directions"]
+
+[sources.llm_post_training_survey]
+kind = "survey"
+arxiv_id = "2503.06072"
+title = "A Survey on Post-training of Large Language Models"
+year = 2025
+date = "2025-03-08"
+url = "https://arxiv.org/abs/2503.06072"
+verification = "abstract"
+core_claim = "摘要提出 LLM 后训练五范式：Fine-tuning、Alignment、Reasoning、Efficiency、Integration and Adaptation。"
+boundary = "这是 LLM 而非 MLLM 五方向的原始出处，仅作跨域交叉印证；不得把其范式名替换本层方向名，也不得据此声称 MLLM 五方向来自本文。"
+used_for = ["cross_check"]
+
+[sources.awesome_mllm_tuning]
+kind = "index"
+title = "Awesome-MLLM-Tuning"
+year = 2026
+url = "https://github.com/WenkeHuang/Awesome-MLLM-Tuning"
+verification = "readme"
+core_claim = "README 以 Selective Tuning、Additive Tuning、Reparameterization Tuning 三大范式整理 MLLM tuning 论文与部分代码链接。"
+boundary = "该 taxonomy 与方法/行为五方向不同轴；README 不提供统一可复现配置、超参、数据划分或评测命令。仅作方法索引，不作五方向来源或复现证据。"
+used_for = ["method_index"]
+
+# -------------------------------------------------------------------------
+# 五个方向：定义来自 mllm_post_training_survey 摘要；其余来源只交叉印证/索引。
+# -------------------------------------------------------------------------
+[directions.instruction_following]
+label = "指令遵循"
+definition = "从图像-文本对话 SFT 向高分辨率视觉 token、交错多模态输入与高质量指令数据配比演进，使 MLLM 遵循用户显式指令。"
+primary_source = "mllm_post_training_survey"
+cross_check_source = "llm_post_training_survey"
+support = "paper_supports"
+boundary = "只描述训练目标与数据形态，不承诺特定模型分数；本仓现有 SFT 多为单任务受控协议，不等于通用多模态指令对齐。"
+
+[directions.preference_calibration]
+label = "偏好对齐与校准"
+definition = "把 DPO / RLAIF 等偏好优化扩展到多模态，处理视觉幻觉、不实描述与人类价值对齐；包含 listwise 多候选排序与多模态 AI 反馈。"
+primary_source = "mllm_post_training_survey"
+cross_check_source = "llm_post_training_survey"
+support = "paper_supports"
+boundary = "偏好数据构建与裁判模型本身可能引入偏差；本仓尚无五维实现的偏好校准任务，登记中的 DPO/MPO 只是 cataloged。"
+
+[directions.reasoning_enhancement]
+label = "推理增强"
+definition = "借鉴 CoT 与可验证奖励强化学习，使 MLLM 从看图说话转向多步视觉、空间、数学与文档推理，GRPO 等群组相对优势方法是代表路线。"
+primary_source = "mllm_post_training_survey"
+cross_check_source = "llm_post_training_survey"
+support = "paper_supports"
+boundary = "可验证奖励只覆盖可程序化判定的子任务；不解释几何语义、不替代人工判分或业务验收，本仓无 CUDA 实测。"
+
+[directions.domain_adaptation]
+label = "领域自适应"
+definition = "面向医疗、遥感、烹饪、工业检测等垂直领域定制后训练；综述强调垂直领域常见单阶段后训练，与通用模型两阶段范式不同。"
+primary_source = "mllm_post_training_survey"
+cross_check_source = "llm_post_training_survey"
+support = "paper_supports"
+boundary = "本仓只有代码 FIM 与 grounding 等受控样板可映射到该方向；没有覆盖综述列举的全部垂直领域，也没有领域许可或业务验收。"
+
+[directions.scalable_learning]
+label = "可扩展与高效学习"
+definition = "在参数规模或模态数量扩展时维持训练与部署效率，覆盖离线/在线蒸馏、PEFT、跨模态能力保持与多配置编排。"
+primary_source = "mllm_post_training_survey"
+cross_check_source = "llm_post_training_survey"
+support = "paper_supports"
+boundary = "综述 v1 用词 scalable training、v2 用词 scalable learning，本层统一为 scalable_learning；吞吐宣传不是训练指标，本仓多配置顺序执行不冒充并发加速。"
+
+# -------------------------------------------------------------------------
+# 14 篇逐篇映射：primary 是主方向，secondary 是次要影响方向。
+# implementation state 由 capabilities.toml 重算，不在此重复登记。
+# -------------------------------------------------------------------------
+[recipes."agent/grpo/wordle-openenv-hf-jobs"]
+primary = ["reasoning_enhancement"]
+secondary = ["scalable_learning"]
+rationale = "Wordle 环境交互 + GRPO 可验证奖励，属于推理增强；在线环境采样也触及效率与扩展问题。当前仅 cataloged。"
+
+[recipes."llm/grpo/qwen2-0-5b-numinamath"]
+primary = ["reasoning_enhancement"]
+secondary = []
+rationale = "数学 GRPO 使用 format/accuracy reward 与 math_verify，是文本可验证奖励推理增强样板；五维已实现但无 GPU 证据。"
+
+[recipes."llm/grpo/qwen2-0-5b-vllm-colocate"]
+primary = ["scalable_learning"]
+secondary = ["reasoning_enhancement"]
+rationale = "vLLM colocate 关注 GRPO 训练中的推理引擎共置与资源效率，主方向是可扩展学习，辅方向是推理增强；当前未实现。"
+
+[recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
+primary = ["reasoning_enhancement"]
+secondary = ["preference_calibration"]
+rationale = "高级奖励设计服务多步推理，奖励塑形同时带有偏好校准色彩；当前未实现。"
+
+[recipes."llm/sft/llama3-8b-xlam-function-calling"]
+primary = ["instruction_following"]
+secondary = ["domain_adaptation"]
+rationale = "xLAM function-calling SFT 按严格 JSON 调用协议遵循指令，同时是工具调用垂直领域适配；五维已实现但无 GPU 证据。"
+
+[recipes."llm/sft/rapidfire-multiconfig"]
+primary = ["instruction_following"]
+secondary = ["scalable_learning"]
+rationale = "RapidFire 客服问答 SFT 是指令遵循样板；4 配置网格与顺序成本对照触及可扩展学习，不冒充并发加速。"
+
+[recipes."llm/sft/starcoder1b-fim"]
+primary = ["domain_adaptation"]
+secondary = ["instruction_following"]
+rationale = "StarCoder FIM 是代码填充垂直领域适配；三段式 FIM 模板仍属指令/输入格式遵循。五维已实现但无 GPU 证据。"
+
+[recipes."vlm/dpo/smolvlm-rlaif-v"]
+primary = ["preference_calibration"]
+secondary = []
+rationale = "RLAIF-V 直接对应多模态 AI 反馈偏好校准；当前仅 cataloged，无五维实现。"
+
+[recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
+primary = ["reasoning_enhancement"]
+secondary = []
+rationale = "Qwen2.5-VL 视觉 GRPO 对应多步视觉/空间推理增强；当前未实现。"
+
+[recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
+primary = ["preference_calibration"]
+secondary = []
+rationale = "MPO 基于 DPO 多损失组合，属于偏好校准；当前未实现，且一手 MPO 论文未核实。"
+
+[recipes."vlm/sft/granite-vision-line-comparison"]
+primary = ["instruction_following"]
+secondary = ["reasoning_enhancement"]
+rationale = "Granite 线段比较 SFT 遵循固定问答指令，同时要求简单视觉关系判断；指标只衡量文本一致性，不解释几何语义。"
+
+[recipes."vlm/sft/paligemma2-refcoco-grounding"]
+primary = ["instruction_following"]
+secondary = ["domain_adaptation"]
+rationale = "PaliGemma2 grounding 按 Detect caption 指令输出定位 token，属于视觉定位任务适配；四指标不是 mAP/AP。"
+
+[recipes."vlm/sft/qwen2-vl-7b-chartqa"]
+primary = ["instruction_following"]
+secondary = ["reasoning_enhancement"]
+rationale = "ChartQA 视觉问答既是指令遵循也涉及图表推理；上游零训练基线已达标，decision.gate=blocked，不能当有效覆盖证据。"
+
+[recipes."vlm/sft/smolvlm-chartqa"]
+primary = ["instruction_following"]
+secondary = []
+rationale = "SmolVLM ChartQA 为图表问答指令遵循；基座在 ChartQA 上训练过，verdict=contaminated_pretraining，不能当泛化覆盖证据。"
