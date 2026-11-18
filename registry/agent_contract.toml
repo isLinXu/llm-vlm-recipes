@@ -3,7 +3,7 @@
 
 schema = 1
 contract_version = "1.0.0"
-assessed_at = "2026-11-17"
+assessed_at = "2026-11-18"
 handoff_md = "docs/AGENT-HANDOFF.md"
 handoff_json = "docs/AGENT-HANDOFF.json"
 agent_instructions = "AGENTS.md"
@@ -156,9 +156,9 @@ purpose = "一手核实论文数量提升目标；当前 20/23"
 
 [[commands]]
 id = "gate-post-training"
-argv = ["post-training", "--check", "--min-fivedim-directions", "5"]
+argv = ["post-training", "--check", "--min-fivedim-directions", "99"]
 expectation = "fail_closed"
-purpose = "方向覆盖提升目标；当前 4/5，偏好校准为缺口"
+purpose = "五维方向覆盖提升目标；当前 5/5 已有五维实现支撑，下一档仍失败关闭"
 
 # -------------------------------------------------------------------------
 # Agent 必须遵守的边界。

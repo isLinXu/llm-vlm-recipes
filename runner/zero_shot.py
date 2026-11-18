@@ -17,8 +17,10 @@ ROOT = Path(os.environ.get("RECIPE_LAB_ROOT", str(CODE_ROOT))).resolve()
 sys.path.insert(0, str(CODE_ROOT / "src"))
 
 from recipe_lab.loader import load_recipes
+from recipe_lab import dpo_task as dpo_adapter
 from recipe_lab import fim_task as fim_adapter
 from recipe_lab import granite_task as granite_adapter
+from recipe_lab import mpo_task as mpo_adapter
 from recipe_lab import paligemma_task as paligemma_adapter
 from recipe_lab import rapidfire_task as rapidfire_adapter
 from recipe_lab import xlam_task as xlam_adapter
@@ -29,8 +31,10 @@ from recipe_lab.math_task import (
 )
 
 TASK_ADAPTERS = {
+    dpo_adapter.RECIPE_ID: dpo_adapter,
     fim_adapter.RECIPE_ID: fim_adapter,
     granite_adapter.RECIPE_ID: granite_adapter,
+    mpo_adapter.RECIPE_ID: mpo_adapter,
     paligemma_adapter.RECIPE_ID: paligemma_adapter,
     xlam_adapter.RECIPE_ID: xlam_adapter,
     rapidfire_adapter.RECIPE_ID: rapidfire_adapter,
@@ -81,7 +85,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="recipe-lab base zero-shot 评估")
     ap.add_argument("--recipe", required=True)
     ap.add_argument("--task-id")
-    ap.add_argument("--config-id", help="RapidFire 4 配置之一；只覆盖 [train]/[peft]/execution.config_id")
+    ap.add_argument("--config-id", help="RapidFire 4 配置或 MPO 三损失消融之一；只覆盖 [train]/[peft]/execution.config_id")
     ap.add_argument("--eval-split", choices=("test", "validation"), default="test",
                     help="RapidFire 发布级：validation 只用于选配置，test 只用于最终验收")
     group = ap.add_mutually_exclusive_group()
@@ -94,9 +98,12 @@ def main() -> int:
     try:
         r = effective_recipe(find_recipe(args.recipe), args.train_seed)
         if args.config_id:
-            if r.id != rapidfire_adapter.RECIPE_ID:
-                raise TaskExecutionError("--config-id 只适用于 RapidFire 多配置 recipe")
-            r = rapidfire_adapter.config_recipe(r, args.config_id)
+            if r.id == rapidfire_adapter.RECIPE_ID:
+                r = rapidfire_adapter.config_recipe(r, args.config_id)
+            elif r.id == mpo_adapter.RECIPE_ID:
+                r = mpo_adapter.config_recipe(r, args.config_id)
+            else:
+                raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO 多配置 recipe")
         plan = zero_shot_plan(r, args.task_id, args.output_root, args.eval_split)
     except (ValueError, TaskExecutionError) as exc:
         ap.exit(1, f"参数错误：{exc}\n")

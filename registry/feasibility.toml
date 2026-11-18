@@ -20,9 +20,13 @@
 # 自建单框 <loc####>/IoU 协议只有 macOS ARM 隔离合成证据；gated 基座、
 # RefCOCO/COCO/Flickr 图像许可、冻结 revision、CUDA 三 seed 与业务验收全未完成。
 # 六篇五维齐备仍 eligible 0/14；两篇 ChartQA 原理性阻塞不变。
+# 2026-11-18 第四次重新判定：DPO / MPO 两篇补齐五维并精确注册 task_router 后
+# 由 not_implemented 改为 pending_freeze（ADR-027）——自建偏好协议只有
+# macOS ARM 隔离合成证据；两篇基座不同，不得跨 backbone 归因算法；
+# revision / CUDA 三 seed / 容差 / 许可全未完成。eligible 0/14 与 ChartQA 阻塞不变。
 
 schema = 1
-assessed_at = "2026-11-16"
+assessed_at = "2026-11-18"
 expected_recipe_count = 14
 title = "Baseline 可行性判定"
 
@@ -89,11 +93,11 @@ requires = ["确认语料许可与去重/污染证据", "CUDA 三 seed 实跑与
 primary_source = "https://huggingface.co/learn/cookbook; registry/evidence.toml"
 
 [recipes."vlm/dpo/smolvlm-rlaif-v"]
-verdict = "not_implemented"
-reason = "图像偏好 collator、chosen/rejected mask、DPO 实装与 frozen ref model 全缺失；且与 MPO 篇使用不同 backbone，现有两篇不能直接归因算法差异。"
-blockers = ["无图像偏好数据 collator 与图像级去重划分", "无显式 beta/loss/DoRA 与 frozen ref", "与 MPO 篇非 shared backbone，无法做配对算法对照"]
-requires = ["与 MPO 共享 SFT checkpoint/processor/偏好 split/预算", "实现配对 3 seed 对照与 ref 无梯度校验", "视觉偏好复载与胜率/长度偏置评估"]
-primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
+verdict = "pending_freeze"
+reason = "wave4 DPO：一手 Cookbook 缺 beta/loss/seed/revision/compute_metrics，评估仅定性生成；smolvlm-dpo-v1 五维自建协议与隔离离线测试现已齐备——图像 hash 80/10/10 同图隔离、显式 beta=0.1 sigmoid、冻结 ref、completion-only 双层 mask、隐式奖励 pairwise、三 seed 套件与 adapter-only 导出，task_router 已精确注册。与 MPO 共享偏好 split 算法但 backbone 不同，cross_backbone_attribution_valid=false。全部只有 macOS ARM 离线合成证据：无 CUDA 实跑、无 completed 证据、revision/镜像/容差/许可全未确认。"
+blockers = ["model/dataset/source/processor revision 与可安装镜像锁未冻结", "无 CUDA 实跑、无 completed evidence；export_tolerance 未基于实跑预声明，--full 导出失败关闭", "与 MPO 篇非 shared backbone，不能把指标差归因 DPO vs MPO 算法", "隐式奖励 pairwise 不等于人类偏好一致率或业务验收；基座/数据许可 pending", "本机 macOS ARM 无 torch/CUDA，离线合成测试只证明代码与协议内部一致"]
+requires = ["授权 Linux CUDA 环境锁定全部 revision 与 frozen environment", "真实三 seed 实跑、基于实跑预声明容差后独立验收、HF offline 复载", "若要做算法消融须换 shared backbone 或显式改写对照目标", "完成许可与业务验收后重新核一手材料并显式改写 verdict"]
+primary_source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_dpo_smolvlm_instruct；registry/evidence.toml [dpo_adapter_audit]"
 
 [recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
 verdict = "not_implemented"
@@ -103,11 +107,11 @@ requires = ["实现视觉 rollout 与 reward 失败关闭", "同图像/prompt/te
 primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
 
 [recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
-verdict = "not_implemented"
-reason = "MPO sigmoid/bco_pair/sft 三损失装配、偏好 collator 与 shared backbone 全缺失；现有不同模型的两篇不能归因方法差异。"
-blockers = ["无三损失装配与显式权重/消融", "与 DPO 篇非 shared backbone", "无配对 3 seed 对照与 ref 无梯度校验"]
-requires = ["与 DPO 共享冻结 backbone 与偏好 split", "实现三损失装配与逐项消融", "复载等价与视觉偏好回归"]
-primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
+verdict = "pending_freeze"
+reason = "wave4 MPO：一手 Cookbook 用未 pin 的 TRL 源码安装、显式 bf16=False 与量化 bfloat16 矛盾、无 seed/revision/compute_metrics，评估仅单样本定性；qwen25vl-mpo-v1 五维自建协议与隔离离线测试现已齐备——与 DPO 共享偏好 split、sigmoid/bco_pair/sft 加权与三消融×三 seed、冻结 ref、隐式奖励 pairwise、adapter-only 导出，task_router 已精确注册。精度矛盾如实登记不静默修正；cross_backbone_attribution_valid=false。全部只有 macOS ARM 离线合成证据：无 CUDA 实跑、无 completed 证据、revision/镜像/容差/许可全未确认；一手 MPO 论文仍 unverified。"
+blockers = ["model/dataset/source/processor revision 与可安装镜像锁未冻结；上游 TRL 源码无 commit", "无 CUDA 实跑、无 completed evidence；export_tolerance 未基于实跑预声明，--full 导出失败关闭", "与 DPO 篇非 shared backbone，三损失消融只在本篇 Qwen backbone 内有效", "隐式奖励 pairwise 不等于人类偏好一致率；基座/数据许可 pending；MPO 一手论文未核实", "本机 macOS ARM 无 torch/CUDA，离线合成测试只证明代码与协议内部一致"]
+requires = ["授权 Linux CUDA 环境锁定全部 revision 与 frozen environment", "真实三消融×三 seed 实跑、基于实跑预声明容差后独立验收、HF offline 复载", "若要做 DPO vs MPO 算法消融须换 shared backbone 或显式改写对照目标", "完成许可与业务验收后重新核一手材料并显式改写 verdict"]
+primary_source = "https://huggingface.co/learn/cookbook/fine_tuning_vlm_mpo；registry/evidence.toml [mpo_adapter_audit]"
 
 [recipes."vlm/sft/granite-vision-line-comparison"]
 verdict = "pending_freeze"

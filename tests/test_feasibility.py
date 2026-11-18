@@ -86,8 +86,8 @@ def test_real_registry_is_complete_and_no_recipe_is_eligible(real_audit):
     assert set(real_audit.recipes) == IDS and len(IDS) == 14
     assert real_audit.counts["total"] == 14
     assert real_audit.counts["eligible"] == 0
-    assert real_audit.counts["pending_freeze"] == 6
-    assert real_audit.counts["not_implemented"] == 6
+    assert real_audit.counts["pending_freeze"] == 8
+    assert real_audit.counts["not_implemented"] == 4
     # ADR-022 / ADR-023 补齐发布级两维后，partial_implementation 归零；
     # 枚举与交叉校验仍保留，防止未来出现「只做三维」的篇目被误判。
     assert real_audit.counts["partial_implementation"] == 0
@@ -102,6 +102,8 @@ def test_real_registry_is_complete_and_no_recipe_is_eligible(real_audit):
     ("llm/sft/llama3-8b-xlam-function-calling", "pending_freeze"),
     ("llm/sft/rapidfire-multiconfig", "pending_freeze"),
     ("llm/sft/starcoder1b-fim", "pending_freeze"),
+    ("vlm/dpo/smolvlm-rlaif-v", "pending_freeze"),
+    ("vlm/mpo/qwen2-5-vl-3b-mpo", "pending_freeze"),
     (CHARTQA_BLOCKED, "blocked_zero_train"),
     (SMOLVLM_CONTAMINATED, "contaminated_pretraining"),
     (GRANITE, "pending_freeze"),

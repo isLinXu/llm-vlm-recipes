@@ -13,6 +13,8 @@ tags = ["vlm", "mpo", "dpo", "dora", "preference", "combined-loss"]
 family = "mpo"
 trainer = "DPOTrainer"
 peft = "qlora-dora"
+upstream_trainer = "DPOTrainer"
+execution_trainer = "Trainer"
 
 [model]
 base = "Qwen/Qwen2.5-VL-3B-Instruct"
@@ -35,8 +37,42 @@ max_length = "none"
 types = ["sigmoid", "bco_pair", "sft"]
 weights = [0.8, 0.2, 1.0]
 
+# --- wave4 自建偏好协议（非上游 notebook 复现；一手缺失项逐条登记）---
+[preference]
+protocol = "qwen25vl-mpo-v1"
+source_split = "train[:5%]"
+held_out_split = "test[:1%]"
+split_percent = [80, 10, 10]
+split_algorithm = "rlaif-v-preference-split-v1"
+loss_types = ["sigmoid", "bco_pair", "sft"]
+loss_weights = [0.8, 0.2, 1.0]
+ablation_configs = ["full", "sigmoid_only", "no_sft"]
+default_config_id = "full"
+bf16_training = false
+quant_compute_dtype = "bfloat16"
+precision_conflict = "DPOConfig 显式 bf16=False，但 4bit 量化 compute dtype=bfloat16；如实登记矛盾，不静默修正"
+max_eval_examples = 300
+loss = "三项标量 sigmoid/bco_pair/sft 按权重求和；policy/ref 仅在 completion token 上计 logprob，image placeholder 与 padding label=-100"
+prompt_format = "system + user(images+prompt)；chosen/rejected 绝不进生成 prompt"
+metric_definition = "win_rate/reward_accuracy 均为 policy implicit reward pairwise，不是外部 reward model/human eval"
+upstream_install = "git+https://github.com/huggingface/trl.git bitsandbytes qwen-vl-utils==0.0.8；TRL 源码无 commit/revision，其他依赖无 pin"
+upstream_seed = "absent（DPOConfig 无 seed/data_seed/deterministic）"
+upstream_revision = "absent（from_pretrained/load_dataset 未传 revision）"
+upstream_compute_metrics = "absent（有 eval_dataset 但无 compute_metrics）"
+upstream_evaluation = "仅 test_dataset[0] 定性展示，无数值指标"
+upstream_ref_model = "None"
+cross_backbone_attribution_valid = false
+self_migration = true
+
 [peft]
+r = 8
+alpha = 8
+dropout = 0.1
+target_module_patterns = ["language_model", "_proj"]
 use_dora = true
+init_lora_weights = "gaussian"
+bias = "none"
+task_type = "CAUSAL_LM"
 
 [quantization]
 load_in_4bit = true
@@ -59,7 +95,8 @@ held_out = true
 seed = 42
 multi_run = true
 compute_metrics = true
-split = "HuggingFaceH4/rlaif-v_formatted；与 DPO 篇共用同一划分，保证 MPO vs DPO 可对照"
+max_new_tokens = 96
+split = "HuggingFaceH4/rlaif-v_formatted；与 DPO 篇共用同一划分，保证同一偏好 split 可校验；backbone 不同不可归因算法"
 
 [budget]
 smoke_steps = 5
@@ -106,6 +143,31 @@ gradient_checkpointing = true
 eval_strategy = "steps"
 seed = 42
 data_seed = 42
+# 以下除 loss_types/loss_weights/bf16/epochs/batch/accum/gradient_checkpointing/eval_strategy 外为本仓自建。
+fp16 = false
+learning_rate = 0.000005
+lr_scheduler_type = "linear"
+weight_decay = 0.0
+eval_steps = 10
+save_steps = 10
+logging_steps = 10
+dataloader_num_workers = 8
+seq_length = 1024
+remove_unused_columns = false
+seed_mechanism = "seed/data_seed 为本仓库定义 baseline 时声明；上游 DPOConfig 无 seed"
+
+[upstream]
+split = "dataset train[:5%] / test[:1%]；上游评估仅 test_dataset[0] 单样本定性展示"
+mask = "DPOTrainer 组合损失；无显式 image_token_id 屏蔽"
+evaluation = "test_dataset[0] 定性展示，无 compute_metrics、无数值"
+revision = "from_pretrained/load_dataset 未传 revision"
+seed = "DPOConfig 无 seed/data_seed/deterministic"
+merge = "未调用 merge_and_unload；本仓 adapter-only 打包"
+install = "git+https://github.com/huggingface/trl.git bitsandbytes qwen-vl-utils==0.0.8；TRL 无 commit/revision"
+attn = "未固定 attn_implementation"
+target_modules = "7 个 LoRA target（use_dora=True）"
+trainer = "DPOTrainer（自建协议改用普通 Trainer + 自建三损失，不依赖未固定 TRL 源码）"
+processing_class = "processor"
 
 [repro]
 level = "L1"
@@ -148,6 +210,8 @@ state = "declared"
 gap = "有上游 HTTPS URL，但 source_sha 为空，notebook 漂移无法定位"
 
 [execution]
+task_id = "qwen25vl-mpo-v1"
+config_id = "full"
 command = "python3 runner/train.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --full"
 entrypoint = "../../../../runner/train.py"
 lockfile = "../../../../runner/locks/vlm__mpo__qwen2-5-vl-3b-mpo.lock.toml"
@@ -176,4 +240,4 @@ registry = "registry/methodology.toml"
 principles = ["dpo_closed_form", "shared_backbone_ablation", "qualitative_only_gap"]
 primary_papers = ["dpo", "underspecification", "qlora"]
 supplement_papers = ["mpl_mpo"]
-stance = "MPO 三损失组合只见二手/TRL release 说明，一手 arXiv 未核到，仅作补充；本仓该篇五维未实现，sigmoid/bco_pair/sft 装配与 shared backbone 对照均未完成。"
+stance = "MPO 三损失组合只见二手/TRL release 说明，一手 arXiv 未核到，仅作补充；本仓该篇已有自建五维迁移实现（qwen25vl-mpo-v1）与隔离离线测试，sigmoid/bco_pair/sft 装配与消融已显式声明；与 DPO 篇非 shared backbone，不能归因算法差异；无 GPU 实跑与业务验收。"

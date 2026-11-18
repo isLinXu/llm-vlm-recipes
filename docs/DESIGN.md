@@ -407,8 +407,8 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 - 背景：用户给出三个来源与一套「MLLM 后训练五方向」提纲。一手核查发现三者不是同一套 taxonomy：preprints 202607.1494（*A Survey on Post-Training of Multimodal Large Language Models*，Zhang 等，2026-07-21，DOI `10.20944/preprints202607.1494.v1`）摘要明确给出 instruction following / preference calibration / reasoning enhancement / domain adaptation / scalable training（v2 作 scalable learning）；arXiv 2503.06072 是 LLM PoLM 五范式（Fine-tuning / Alignment / Reasoning / Efficiency / Integration and Adaptation），不是 MLLM 五方向原始出处；`WenkeHuang/Awesome-MLLM-Tuning` 的顶层分类是 Selective / Additive / Reparameterization Tuning，和方法/行为方向不同轴，且没有统一可复现配置。若混用会把二手提纲误写成原文事实，也会用方法索引冒充复现证据。
 - 决策一（第五层审计）：新增 `registry/mllm_post_training.toml` 与 `src/recipe_lab/post_training.py`，回答「训练工作覆盖 MLLM 后训练哪个能力方向、缺口在哪」。它与前四层互不替代，任何一层通过都不解锁 GPU 晋级或 B2/B3。`post-training --check` 校验来源边界、五方向闭合、14 篇精确映射和能力/可行性交叉；`--min-fivedim-directions N` 是提升目标。
 - 决策二（来源分级）：`verification` 分为 `abstract_and_index` / `abstract` / `readme`。MLLM 综述只能作方向原始出处，且必须保留「正文被 Akamai 防护，仅标题/作者/日期/DOI/摘要经索引交叉核实」的边界；LLM 综述只能作 `cross_check`；Awesome repo 只能作 `method_index`。readme 级索引不得作方向出处；任何来源都不得支撑方法细节、benchmark 数值、本仓 expected/tolerance 或 GPU 实测。
-- 决策三（映射与缺口）：14 篇逐篇登记 `primary` / `secondary` / `rationale`；primary 必须非空且与 secondary 不重叠；每个方向至少有一篇 primary 映射。实现状态从 `capabilities.toml` 重算，不采信本登记自称；`blocked_zero_train` 与 `contaminated_pretraining` 篇显式标为无效覆盖证据，不能靠数量掩盖原理性阻塞。当前 4/5 方向有五维实现支撑，唯一缺口是 `preference_calibration`。
-- 验证与边界：`tests/test_post_training.py`（27 项）覆盖来源越权、方向缺失、映射缺口、枚举/计数错误、禁止宣称、能力/可行性漂移与 CLI 行为。该层只做覆盖地图，不表示 DPO/RLAIF-V 已有 baseline，不表示论文中的具体方法已在本仓实现或实测。GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 全部未变。
+- 决策三（映射与缺口）：14 篇逐篇登记 `primary` / `secondary` / `rationale`；primary 必须非空且与 secondary 不重叠；每个方向至少有一篇 primary 映射。实现状态从 `capabilities.toml` 重算，不采信本登记自称；`blocked_zero_train` 与 `contaminated_pretraining` 篇显式标为无效覆盖证据，不能靠数量掩盖原理性阻塞。ADR-027 补齐 DPO/MPO 五维后，五方向均有五维实现支撑；方向覆盖不等于 GPU baseline。
+- 验证与边界：`tests/test_post_training.py` 覆盖来源越权、方向缺失、映射缺口、枚举/计数错误、禁止宣称、能力/可行性漂移与 CLI 行为。该层只做覆盖地图，不表示 DPO/RLAIF-V 已有 baseline，不表示论文中的具体方法已在本仓实测。GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 全部未变。
 
 ---
 
@@ -419,6 +419,16 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 - 决策二（可重建性优先）：`recipe-lab handoff --check` 用真实 CLI 把五份生成报告重建到临时目录并逐字节比较，任一报告与当前源码/注册表不一致即失败关闭。`docs/AGENT-HANDOFF.md/json` 自身由同一审计器生成，不引入时间戳或绝对路径，重复生成结果稳定。
 - 决策三（硬边界）：契约禁止手改 `docs/` 生成物；登记 `pass` 与 `fail_closed` 两类命令，`--min-*` 提升目标必须继续失败；Guardrails 明确不得把静态检查当 GPU 验证、不得绕过原理性阻塞、未得明确要求不得 push。禁止宣称模式扫描所有面向Agent的说明文字。
 - 验证与边界：`tests/test_agent_contract.py`（21 项）覆盖事实源存在、生成物哈希、命令枚举、失败关闭门禁登记、禁止宣称、重复 id、缺 `{out}` 占位、以及真实 CLI 重建一致性。`make ci` 接入 `agent-check`；`make report` 接入 `handoff --report`。本契约只提升可发现性与可复现性，不认证 GPU 执行、不解锁 B2/B3，也不替代任何一层审计。
+
+---
+
+## ADR-027 — wave4 偏好篇补齐五维：共享偏好 split，禁止跨 backbone 归因
+
+- 背景：ADR-025 把 `preference_calibration` 标为唯一五维缺口；wave4 要求 DPO/MPO 有真实任务代码与隔离离线测试，且不得把不同基座的两篇当成算法消融。
+- 决策一（自建协议）：`smolvlm-dpo-v1` 用普通 Trainer + 显式 beta=0.1 sigmoid、冻结 ref、图像 hash 80/10/10、completion-only 双层 mask、隐式奖励 pairwise；`qwen25vl-mpo-v1` 在同一偏好 split 算法上叠加 sigmoid/bco_pair/sft（0.8/0.2/1.0）与 full/sigmoid_only/no_sft 消融，并如实登记 bf16=False 与量化 bfloat16 矛盾。
+- 决策二（精确路由）：`task_router` 注册两篇的 task/suite/export；C306/C307/C405 与 fingerprint/frozen_environment 按任务分派；`cross_backbone_attribution_valid=false` 写入配方、套件计划与导出包。
+- 决策三（登记联动）：capabilities 五维改 `implemented`，feasibility 改 `pending_freeze`，evidence 增补 `dpo_adapter_audit` / `mpo_adapter_audit`；后训练方向 5/5 有五维支撑后，`gate-post-training` 提升目标改为 `--min-fivedim-directions 99` 继续失败关闭。
+- 边界：全部是 macOS ARM 隔离合成证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变。隐式奖励不等于人类偏好一致率；若要做 DPO vs MPO 算法消融，必须换 shared backbone 或显式改写对照目标。
 
 ---
 

@@ -622,13 +622,13 @@ stance = "PaliGemma/2 论文只支持模型与迁移定位，loc 1024 桶与 COC
 principles = ["dpo_closed_form", "rlaif_v_open_feedback", "shared_backbone_ablation"]
 primary_papers = ["dpo", "rlaif_v", "underspecification"]
 supplement_papers = []
-stance = "DPO 闭式损失与 RLAIF-V 开源反馈各有论文依据；但本仓该篇五维未实现，且与 MPO 篇非 shared backbone，无法直接归因算法差异。"
+stance = "DPO 闭式损失与 RLAIF-V 开源反馈各有论文依据；本仓该篇已有自建五维迁移实现（smolvlm-dpo-v1）与隔离离线测试，但与 MPO 篇非 shared backbone，不能把指标差异归因 DPO vs MPO 算法；无 GPU 实跑与业务验收。"
 
 [recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
 principles = ["dpo_closed_form", "shared_backbone_ablation", "qualitative_only_gap"]
 primary_papers = ["dpo", "underspecification", "qlora"]
 supplement_papers = ["mpl_mpo"]
-stance = "MPO 三损失组合只见二手/TRL release 说明，一手 arXiv 未核到，仅作补充；本仓该篇五维未实现，sigmoid/bco_pair/sft 装配与 shared backbone 对照均未完成。"
+stance = "MPO 三损失组合只见二手/TRL release 说明，一手 arXiv 未核到，仅作补充；本仓该篇已有自建五维迁移实现（qwen25vl-mpo-v1）与隔离离线测试，sigmoid/bco_pair/sft 装配与消融已显式声明；与 DPO 篇非 shared backbone，不能归因算法差异；无 GPU 实跑与业务验收。"
 
 [recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
 principles = ["grpo_critic_free", "single_box_iou_loc", "reward_hacking_needs_independent_metric"]

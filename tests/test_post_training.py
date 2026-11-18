@@ -73,7 +73,7 @@ def test_real_registry_is_clean(real_audit):
     assert real_audit.counts["sources"] == 3
     assert real_audit.counts["directions"] == 5
     assert real_audit.counts["recipes"] == 14
-    assert real_audit.counts["implemented_recipes"] == 6
+    assert real_audit.counts["implemented_recipes"] == 8
 
 
 def test_covers_all_recipes(real_audit, recipes):
@@ -93,11 +93,13 @@ def test_source_boundaries_are_explicit(real_audit):
     assert real_audit.sources["awesome_mllm_tuning"]["used_for"] == ["method_index"]
 
 
-def test_preference_calibration_is_the_real_gap(real_audit):
-    assert real_audit.coverage[PREFERENCE]["gap"] is True
-    assert real_audit.coverage[PREFERENCE]["implemented_count"] == 0
-    assert real_audit.counts["implemented_directions"] == 4
-    assert real_audit.counts["gap_directions"] == 1
+def test_preference_calibration_has_five_dim_support_but_not_gpu_baseline(real_audit):
+    assert real_audit.coverage[PREFERENCE]["gap"] is False
+    assert real_audit.coverage[PREFERENCE]["implemented_count"] >= 2
+    assert real_audit.counts["implemented_directions"] == 5
+    assert real_audit.counts["gap_directions"] == 0
+    assert real_audit.rows["vlm/dpo/smolvlm-rlaif-v"]["feasibility_verdict"] == "pending_freeze"
+    assert real_audit.rows["vlm/mpo/qwen2-5-vl-3b-mpo"]["feasibility_verdict"] == "pending_freeze"
 
 
 def test_blocked_and_contaminated_are_not_valid_coverage(real_audit):
@@ -110,8 +112,10 @@ def test_blocked_and_contaminated_are_not_valid_coverage(real_audit):
 def test_implementation_state_is_recomputed_from_capabilities(real_audit):
     implemented = {rid for rid, row in real_audit.rows.items()
                    if row["implementation_state"] == "five_dimension_implemented"}
-    assert len(implemented) == 6
+    assert len(implemented) == 8
     assert "llm/grpo/qwen2-0-5b-numinamath" in implemented
+    assert "vlm/dpo/smolvlm-rlaif-v" in implemented
+    assert "vlm/mpo/qwen2-5-vl-3b-mpo" in implemented
     assert BLOCKED not in implemented
 
 
@@ -121,7 +125,8 @@ def test_report_contains_key_sections(real_audit, recipes):
     assert "来源边界" in text
     assert "五方向与覆盖" in text
     assert "逐篇映射" in text
-    assert "[GAP] `preference_calibration`" in text
+    assert "preference_calibration" in text
+    assert "[GAP]" not in text
 
 
 # -------------------------------------------------------------------------
@@ -263,7 +268,7 @@ def test_capability_drift_changes_implementation_state(tmp_path, recipes):
     a = pm.audit(_sandbox(tmp_path, capabilities=cap), recipes)
     assert a.ok
     assert a.rows["llm/grpo/qwen2-0-5b-numinamath"]["implementation_state"] == "not_implemented"
-    assert a.counts["implemented_recipes"] == 5
+    assert a.counts["implemented_recipes"] == 7
 
 
 def test_feasibility_drift_changes_coverage_validity(tmp_path, recipes):
@@ -309,9 +314,10 @@ def test_cli_json_shape():
 
 
 def test_cli_min_fivedim_target_fails_closed():
-    p = _cli("post-training", "--check", "--min-fivedim-directions", "5")
+    # 五方向均已有五维实现支撑后，仍用远高于当前值的提升目标保持失败关闭。
+    p = _cli("post-training", "--check", "--min-fivedim-directions", "99")
     assert p.returncode == 1
-    assert "preference_calibration" in p.stdout
+    assert "低于要求 99" in p.stdout
 
 
 def test_cli_report_written(tmp_path):

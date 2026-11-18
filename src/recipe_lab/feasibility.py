@@ -239,10 +239,13 @@ def render(root: Path, recipes: Iterable[Recipe]) -> str:
                   "按此排序，wave3 两篇视觉任务现已各补齐五维：`vlm/sft/granite-vision-line-comparison`"
                   "（图像内容 hash 三段隔离、显式 image token + assistant-only 双层 mask、冻结 processor revision、"
                   "逐题 held-out 重算）与 `vlm/sft/paligemma2-refcoco-grounding`（COCO xywh→xyxy 统一、"
-                  "1024 桶 `<loc####>` round-trip/IoU、单框 completion-only 协议）。两篇都已按精确 recipe_id "
-                  "注册 task_router 并由 not_implemented 改判 pending_freeze，但**这只是代码齐备，不是晋级**："
-                  "仍无冻结 revision / CUDA 三 seed 实跑 / 预声明容差 / 真实 HF offline 复载 / 许可与业务验收。"
-                  "两篇 ChartQA 保持原理性阻塞，不计入「适配进度」；其余 6 篇仍为 not_implemented。", ""])
+                  "1024 桶 `<loc####>` round-trip/IoU、单框 completion-only 协议）。wave4 的 "
+                  "`vlm/dpo/smolvlm-rlaif-v` 与 `vlm/mpo/qwen2-5-vl-3b-mpo` 亦已补齐五维并精确注册 "
+                  "task_router（图像偏好 hash 隔离、显式 beta/三损失、冻结 ref、隐式奖励 pairwise），"
+                  "但两篇基座不同，`cross_backbone_attribution_valid=false`。以上改判 pending_freeze "
+                  "**只是代码齐备，不是晋级**：仍无冻结 revision / CUDA 三 seed 实跑 / 预声明容差 / "
+                  "真实 HF offline 复载 / 许可与业务验收。两篇 ChartQA 保持原理性阻塞，不计入「适配进度」；"
+                  "其余 4 篇仍为 not_implemented。", ""])
     if checked.errors:
         lines.extend(["### 登记完整性错误", ""] + [f"- [FAIL] {e}" for e in checked.errors] + [""])
     return "\n".join(lines)

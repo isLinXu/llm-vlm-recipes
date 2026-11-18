@@ -10,9 +10,9 @@
 
 ## 当前事实
 
-- 配方：**14 篇**；五维已实现 **6 篇**；GPU verified **0**；eligible **0**。
+- 配方：**14 篇**；五维已实现 **8 篇**；GPU verified **0**；eligible **0**。
 - 方法论：**20/23** 篇论文一手核实。
-- 后训练方向：**4/5** 有五维实现支撑，缺口 **1** 个。
+- 后训练方向：**5/5** 有五维实现支撑，缺口 **0** 个。
 - 原理性阻塞：`vlm/sft/qwen2-vl-7b-chartqa`, `vlm/sft/smolvlm-chartqa`。
 
 ## 标准工作流
@@ -44,9 +44,9 @@
 | --- | --- | --- | --- |
 | `docs/MATRIX.md` | `matrix --out {out}` | `5b558e12f772` | 全量 14 篇索引与五维矩阵 |
 | `docs/REPRODUCIBILITY.md` | `repro --report {out}` | `36df533d1b19` | 上游可复现性历史审计 |
-| `docs/BASELINE-READINESS.md` | `baseline --report {out}` | `fc3bf84c405d` | B0–B3 就绪、能力矩阵与缺口 |
-| `docs/METHODOLOGY.md` | `methodology --report {out}` | `7c4f0b74fadc` | 方法论依据、一手论文核查与编号更正 |
-| `docs/MLLM-POST-TRAINING.md` | `post-training --report {out}` | `a57bb7881904` | MLLM 后训练五方向与逐篇映射 |
+| `docs/BASELINE-READINESS.md` | `baseline --report {out}` | `2767c291eaa9` | B0–B3 就绪、能力矩阵与缺口 |
+| `docs/METHODOLOGY.md` | `methodology --report {out}` | `2299f4a037ba` | 方法论依据、一手论文核查与编号更正 |
+| `docs/MLLM-POST-TRAINING.md` | `post-training --report {out}` | `36dd5a27fb46` | MLLM 后训练五方向与逐篇映射 |
 
 ## 命令契约
 
@@ -62,7 +62,7 @@
 | `gate-l2` | fail_closed | `repro --check --min-level L2` | 当前不得宣称上游实验完全锁定 |
 | `gate-feasibility-b2` | fail_closed | `feasibility --check --min-state B2` | 当前不得把任何篇判为可直接晋级 |
 | `gate-methodology` | fail_closed | `methodology --check --min-verified-papers 99` | 一手核实论文数量提升目标；当前 20/23 |
-| `gate-post-training` | fail_closed | `post-training --check --min-fivedim-directions 5` | 方向覆盖提升目标；当前 4/5，偏好校准为缺口 |
+| `gate-post-training` | fail_closed | `post-training --check --min-fivedim-directions 99` | 五维方向覆盖提升目标；当前 5/5 已有五维实现支撑，下一档仍失败关闭 |
 
 ## Agent Guardrails
 

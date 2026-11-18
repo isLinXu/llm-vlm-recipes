@@ -8,6 +8,8 @@ export PYTHONPATH := $(CURDIR)/src
         rapidfire-dry-run rapidfire-suite-dry-run rapidfire-export-dry-run \
         granite-dry-run granite-suite-dry-run granite-export-dry-run \
         paligemma-dry-run paligemma-suite-dry-run paligemma-export-dry-run \
+        dpo-dry-run dpo-suite-dry-run dpo-export-dry-run \
+        mpo-dry-run mpo-suite-dry-run mpo-export-dry-run \
         feasibility-check methodology-check methodology-report ci
 
 help:
@@ -45,6 +47,12 @@ help:
 	@echo "  make paligemma-dry-run PaliGemma 三个基础入口只读预演（单框 loc/IoU 协议）"
 	@echo "  make paligemma-suite-dry-run  PaliGemma 三 seed 发布级套件只读预演"
 	@echo "  make paligemma-export-dry-run PaliGemma 普通 LoRA adapter-only 导出只读预演"
+	@echo "  make dpo-dry-run       SmolVLM DPO 三个基础入口只读预演（偏好对图像 hash 隔离）"
+	@echo "  make dpo-suite-dry-run  DPO 三 seed 发布级套件只读预演"
+	@echo "  make dpo-export-dry-run DPO adapter-only 导出只读预演（ref 不打包）"
+	@echo "  make mpo-dry-run       Qwen2.5-VL MPO 三个基础入口只读预演（三损失消融）"
+	@echo "  make mpo-suite-dry-run  MPO 3 消融 × 3 seed 发布级套件只读预演"
+	@echo "  make mpo-export-dry-run MPO 选中消融 adapter-only 导出只读预演"
 	@echo "  make ci                CI 门禁：doctor + L6 validate + test + 三个 --check + capabilities-check"
 
 doctor:
@@ -203,6 +211,31 @@ paligemma-suite-dry-run:
 paligemma-export-dry-run:
 	$(PYTHON) runner/export.py --recipe vlm/sft/paligemma2-refcoco-grounding --checkpoint "$(CURDIR)/runs/absent/paligemma-full" --evaluation "$(CURDIR)/runs/absent/paligemma-eval/evaluation.json" --output "$(CURDIR)/runs/paligemma-export-preview" --dry-run
 
+# wave4 DPO：检查偏好对图像 hash 隔离、显式 beta/冻结 ref、隐式奖励 pairwise。
+# 只读预演，不产 completed 证据；与 MPO 篇非 shared backbone，不归因算法。
+dpo-dry-run:
+	$(PYTHON) runner/train.py --recipe vlm/dpo/smolvlm-rlaif-v --dry-run --json
+	$(PYTHON) runner/eval.py --recipe vlm/dpo/smolvlm-rlaif-v --dry-run
+	$(PYTHON) runner/zero_shot.py --recipe vlm/dpo/smolvlm-rlaif-v --dry-run
+
+dpo-suite-dry-run:
+	$(PYTHON) runner/suite.py --recipe vlm/dpo/smolvlm-rlaif-v --seeds 42 43 44 --output-root "$(CURDIR)/runs/dpo-suite-preview" --dry-run
+
+dpo-export-dry-run:
+	$(PYTHON) runner/export.py --recipe vlm/dpo/smolvlm-rlaif-v --checkpoint "$(CURDIR)/runs/absent/dpo-full" --evaluation "$(CURDIR)/runs/absent/dpo-eval/evaluation.json" --output "$(CURDIR)/runs/dpo-export-preview" --dry-run
+
+# wave4 MPO：检查三损失消融、精度矛盾如实登记、与 DPO 共享偏好 split 但不跨 backbone 归因。
+mpo-dry-run:
+	$(PYTHON) runner/train.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --dry-run --json
+	$(PYTHON) runner/eval.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --dry-run
+	$(PYTHON) runner/zero_shot.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --dry-run
+
+mpo-suite-dry-run:
+	$(PYTHON) runner/suite.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --seeds 42 43 44 --output-root "$(CURDIR)/runs/mpo-suite-preview" --dry-run
+
+mpo-export-dry-run:
+	$(PYTHON) runner/export.py --recipe vlm/mpo/qwen2-5-vl-3b-mpo --checkpoint "$(CURDIR)/runs/absent/mpo-full" --evaluation "$(CURDIR)/runs/absent/mpo-eval/evaluation.json" --output "$(CURDIR)/runs/mpo-export-preview" --dry-run
+
 report: matrix
 	$(PYTHON) -m recipe_lab repro --report
 	$(PYTHON) -m recipe_lab baseline --report
@@ -217,5 +250,5 @@ test:
 # 不应让仓库因为诚实记录了风险而永远红灯。发布前单独跑 make validate-strict。
 # 两个 --check 校验的都是审计完整性（等级/状态无虚报、证据可追溯），
 # 不因为「0/14 可复现」「0/14 到 B2」而失败（ADR-008 / ADR-010）。
-ci: doctor validate-l6 test repro-check baseline-check capabilities-check feasibility-check methodology-check post-training-check agent-check suite-dry-run fim-dry-run xlam-dry-run rapidfire-dry-run granite-dry-run paligemma-dry-run fim-suite-dry-run fim-export-dry-run xlam-suite-dry-run xlam-export-dry-run rapidfire-suite-dry-run rapidfire-export-dry-run granite-suite-dry-run granite-export-dry-run paligemma-suite-dry-run paligemma-export-dry-run
+ci: doctor validate-l6 test repro-check baseline-check capabilities-check feasibility-check methodology-check post-training-check agent-check suite-dry-run fim-dry-run xlam-dry-run rapidfire-dry-run granite-dry-run paligemma-dry-run dpo-dry-run mpo-dry-run fim-suite-dry-run fim-export-dry-run xlam-suite-dry-run xlam-export-dry-run rapidfire-suite-dry-run rapidfire-export-dry-run granite-suite-dry-run granite-export-dry-run paligemma-suite-dry-run paligemma-export-dry-run dpo-suite-dry-run dpo-export-dry-run mpo-suite-dry-run mpo-export-dry-run
 	@echo "CI 通过（0 error）。提升 status / repro.level / baseline_contract.state 前请单独运行 make validate-strict 复核 warning。"

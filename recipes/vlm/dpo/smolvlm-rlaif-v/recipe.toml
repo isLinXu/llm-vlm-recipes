@@ -12,6 +12,9 @@ tags = ["vlm", "dpo", "preference", "rlaif"]
 [method]
 family = "dpo"
 trainer = "DPOTrainer"
+upstream_trainer = "DPOTrainer"
+peft = "qlora-dora"
+execution_trainer = "Trainer"
 
 [model]
 base = "HuggingFaceTB/SmolVLM-Instruct"
@@ -36,6 +39,59 @@ datasets = "3.2.0"
 bitsandbytes = "0.45.0"
 peft = "0.14.0"
 accelerate = "1.2.0"
+
+# --- wave4 自建偏好协议（非上游 notebook 复现；一手缺失项逐条登记）---
+[preference]
+protocol = "smolvlm-dpo-v1"
+source_split = "train[:6%]"
+held_out_split = "test[:1%]"
+split_percent = [80, 10, 10]
+split_algorithm = "rlaif-v-preference-split-v1"
+beta = 0.1
+loss_type = "sigmoid"
+max_eval_examples = 300
+loss = "显式 beta 的 sigmoid DPO loss；policy/ref 仅在 completion token 上计 logprob，image placeholder 与 padding label=-100"
+prompt_format = "system + user(images+prompt)；chosen/rejected 绝不进生成 prompt"
+metric_definition = "win_rate/reward_accuracy 均为 policy implicit reward pairwise，不是外部 reward model/human eval"
+upstream_beta = "absent（DPOConfig 未给 beta，依赖 TRL 0.12.2 默认值；本仓自建 0.1）"
+upstream_loss_type = "absent（本仓自建 sigmoid，不沿用未冻结的默认实现）"
+upstream_learning_rate = "absent（本仓训练 learning_rate 为自建值）"
+upstream_max_length = "absent（本仓用自建 seq_length）"
+upstream_ref_model = "None（本仓显式冻结 ref，不与 policy 共享 adapter）"
+upstream_evaluation = "仅定性生成，无 compute_metrics；本仓补 held-out 隐式奖励 pairwise 指标"
+upstream_merge = "PeftModel.from_pretrained only；无 merge_and_unload；本仓 adapter-only 打包"
+upstream_dataset_split = "train[:6%] / test[:1%]；本仓按图像 hash 重划 80/10/10"
+upstream_deps = "transformers==4.46.3 / trl==0.12.2 / datasets==3.2.0 / bitsandbytes==0.45.0 / peft==0.14.0 / accelerate==1.2.0 来自注释；flash-attn 无版本"
+cross_backbone_attribution_valid = false
+self_migration = true
+
+[peft]
+r = 8
+alpha = 8
+dropout = 0.1
+target_module_patterns = ["language_model", "_proj"]
+use_dora = true
+init_lora_weights = "gaussian"
+bias = "none"
+task_type = "CAUSAL_LM"
+
+[quantization]
+load_in_4bit = true
+bnb_4bit_quant_type = "nf4"
+bnb_4bit_use_double_quant = true
+bnb_4bit_compute_dtype = "bfloat16"
+
+[upstream]
+split = "dataset train[:6%] / test[:1%]；上游 evaluate 仅 test[:1%] 定性生成"
+mask = "DPOTrainer 隐式处理 chosen/rejected；无显式 image_token_id 屏蔽"
+evaluation = "无 compute_metrics、无数值指标，仅定性生成展示"
+revision = "from_pretrained/load_dataset 均未传 revision"
+seed = "DPOConfig 未给 seed/data_seed/deterministic"
+merge = "文字称 merge LoRA，代码只有 PeftModel.from_pretrained，无 merge_and_unload"
+attn = "flash-attn 无版本；未固定 attn_implementation"
+target_modules = "7 个 LoRA target（use_dora=True，init_lora_weights=gaussian）"
+trainer = "DPOTrainer（自建协议改用普通 Trainer + 自建 sigmoid DPO loss，不依赖未固定 TRL 源码）"
+processing_class = "processor"
 
 [hardware]
 accelerator = "L4"
@@ -79,6 +135,17 @@ eval_strategy = "steps"
 eval_steps = 10
 seed = 42
 data_seed = 42
+# 以下为本仓自建训练参数；上游 DPOConfig 未显式给 learning_rate / beta / max_length。
+learning_rate = 0.000005
+lr_scheduler_type = "linear"
+weight_decay = 0.0
+save_steps = 10
+logging_steps = 10
+bf16 = true
+fp16 = false
+seq_length = 512
+remove_unused_columns = false
+seed_mechanism = "seed/data_seed 为本仓库定义 baseline 时声明；上游 DPOConfig 无 seed"
 
 [repro]
 level = "L1"
@@ -126,12 +193,15 @@ multi_run = true
 held_out = true
 seed = 42
 metrics = ["win_rate", "reward_accuracy"]
+max_new_tokens = 96
+compute_metrics = true
 
 [budget]
 smoke_steps = 5
 full_steps = 150
 
 [execution]
+task_id = "smolvlm-dpo-v1"
 command = "python3 runner/train.py --recipe vlm/dpo/smolvlm-rlaif-v --full"
 entrypoint = "../../../../runner/train.py"
 lockfile = "../../../../runner/locks/vlm__dpo__smolvlm-rlaif-v.lock.toml"
@@ -160,4 +230,4 @@ registry = "registry/methodology.toml"
 principles = ["dpo_closed_form", "rlaif_v_open_feedback", "shared_backbone_ablation"]
 primary_papers = ["dpo", "rlaif_v", "underspecification"]
 supplement_papers = []
-stance = "DPO 闭式损失与 RLAIF-V 开源反馈各有论文依据；但本仓该篇五维未实现，且与 MPO 篇非 shared backbone，无法直接归因算法差异。"
+stance = "DPO 闭式损失与 RLAIF-V 开源反馈各有论文依据；本仓该篇已有自建五维迁移实现（smolvlm-dpo-v1）与隔离离线测试，但与 MPO 篇非 shared backbone，不能把指标差异归因 DPO vs MPO 算法；无 GPU 实跑与业务验收。"

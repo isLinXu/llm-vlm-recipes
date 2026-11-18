@@ -123,6 +123,16 @@ def build_plan(r: Recipe, mode: str = "dry-run") -> dict[str, Any]:
         # 精确分派到 paligemma_suite / paligemma_export。
         from .paligemma_task import task_plan
         return task_plan(r, plan, mode)
+    if r.id == "vlm/dpo/smolvlm-rlaif-v":
+        # wave4 DPO：SmolVLM 偏好对图像 hash 隔离 + beta/ref 冻结；发布级由
+        # task_router 精确分派到 dpo_suite / dpo_export。
+        from .dpo_task import task_plan
+        return task_plan(r, plan, mode)
+    if r.id == "vlm/mpo/qwen2-5-vl-3b-mpo":
+        # wave4 MPO：Qwen2.5-VL 三损失组合 + 消融；发布级由 task_router 精确
+        # 分派到 mpo_suite / mpo_export。
+        from .mpo_task import task_plan
+        return task_plan(r, plan, mode)
     plan["execution_supported"] = False
     plan["unsupported_reason"] = "该任务的数据/训练/评估适配尚未实现；dry-run 仅输出声明"
     return plan

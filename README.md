@@ -1,6 +1,6 @@
 # recipe-lab
 
-面向 LLM / VLM 的研究与业务训练基线仓库。当前交付是**更严格的维护框架 + 六篇五维参考适配**，不是「14 篇已完成 baseline」。
+面向 LLM / VLM 的研究与业务训练基线仓库。当前交付是**更严格的维护框架 + 八篇五维参考适配**，不是「14 篇已完成 baseline」。
 
 [输入调研](docs/llm-vlm-training-cookbook-research.html) · [来源与修正](docs/SOURCE-MAP.md) · [设计决策](docs/DESIGN.md) · [验证规则](docs/VERIFICATION.md) · [Agent 交接](AGENTS.md)
 
@@ -23,12 +23,12 @@
 | 维度 | 当前事实 | 判定 |
 | --- | --- | --- |
 | 配方登记 | 14 篇，逐篇一手材料核查 | 登记不等于逐字节复现上游 |
-| 五维代码 | 6 篇具备 `data/train/eval/comparison/export`；70 格中 30 implemented / 40 missing | `implemented` ≠ `verified` |
+| 五维代码 | 8 篇具备 `data/train/eval/comparison/export`；70 格中 40 implemented / 30 missing | `implemented` ≠ `verified` |
 | CUDA GPU 实跑 | 0 篇；未下载真实模型/数据，未确认框架兼容、显存或训练效果 | 不能宣称任何篇为已验证 baseline |
-| 就绪度 | B2+ 0、B3 0；eligible 0/14 | 6 pending_freeze、6 not_implemented、2 原理性阻塞 |
+| 就绪度 | B2+ 0、B3 0；eligible 0/14 | 8 pending_freeze、4 not_implemented、2 原理性阻塞 |
 | 上游可复现性 | L0 8 / L1 6 / L2+ 0 | 没有一篇确认完全锁定 |
 | 方法论依据 | 14 篇逐篇绑定；20/23 篇论文一手核实，10 条编号更正 | 论文不背书 GPU 晋级 |
-| MLLM 后训练方向 | 五方向映射 14 篇；4/5 有五维实现支撑，偏好校准为缺口 | 不表示 DPO / RLAIF-V 已有 baseline |
+| MLLM 后训练方向 | 五方向映射 14 篇；5/5 有五维实现支撑 | 方向覆盖不等于 DPO / MPO 已有 GPU baseline |
 | Agent 交接契约 | `AGENTS.md` + `AGENT-HANDOFF.md/json`；契约登记的命令可复现 | 不新增认证能力，不解锁 B2/B3 |
 | CI | `make ci` 0 error / 1160 passed（最近一次） | 只证明内部一致性与离线测试通过 |
 
@@ -129,10 +129,11 @@ PYTHONPATH=src python3 -m recipe_lab handoff --report  # 生成两份交接视�
 `status` 的 cataloged → ported → smoke-passed → benchmarked 只记录配方维护进展，不替代上述审计。
 复现上游实验与自建 baseline 可以不同，但后者必须公开声明差异并冻结、实测。
 
-## 六篇已实装参考适配
+## 八篇已实装参考适配
 
-六篇均按 `task_router` 精确分派 `task` / `suite` / `export`，未知或冲突任务失败关闭，互不借用协议。
+八篇均按 `task_router` 精确分派 `task` / `suite` / `export`，未知或冲突任务失败关闭，互不借用协议。
 它们都只有离线合成证据；无 CUDA 实测、无冻结 revision；真实配方未预声明 `export_tolerance` 时 `--full` 导出失败关闭。
+DPO 与 MPO 共享偏好 split 算法，但基座不同，`cross_backbone_attribution_valid=false`。
 
 | 任务 | recipe_id / task_id | 自建协议一句话 | 发布级对照 |
 | --- | --- | --- | --- |
@@ -142,6 +143,8 @@ PYTHONPATH=src python3 -m recipe_lab handoff --report  # 生成两份交接视�
 | RapidFire | `llm/sft/rapidfire-multiconfig` / `rapidfire-sft-v1` | 4 配置顺序执行，规范化问题 hash 80/10/10 | 4 配置 × 3 seed，validation 选配置 / test 验收一次 |
 | Granite Vision | `vlm/sft/granite-vision-line-comparison` / `granite-linecomparison-v1` | 图像字节 hash 隔离 + 显式 `image_token_id` + 双层 mask | 3 seed 逐题重算 + DoRA/4bit adapter-only |
 | PaliGemma2 | `vlm/sft/paligemma2-refcoco-grounding` / `paligemma-grounding-v1` | COCO `xywh`→`xyxy` + 1024 桶 `<loc####>` round-trip | 3 seed 四指标 + 普通 LoRA adapter-only |
+| SmolVLM DPO | `vlm/dpo/smolvlm-rlaif-v` / `smolvlm-dpo-v1` | 图像 hash 隔离 + 显式 beta sigmoid + 冻结 ref | 3 seed 隐式奖励 pairwise + adapter-only（不打包 ref） |
+| Qwen2.5-VL MPO | `vlm/mpo/qwen2-5-vl-3b-mpo` / `qwen25vl-mpo-v1` | 共享偏好 split + sigmoid/bco_pair/sft 三损失消融 | 3 消融 × 3 seed；不得与 DPO 篇跨 backbone 归因 |
 
 <details>
 <summary>数学 GRPO：固定划分、格式奖励、三 seed 套件</summary>
@@ -244,7 +247,39 @@ make paligemma-export-dry-run
 
 </details>
 
-其余 8 篇为 6 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
+<details>
+<summary>SmolVLM DPO：显式 beta 与冻结 ref</summary>
+
+- 上游 DPOConfig 未给 beta/loss/seed/revision/compute_metrics，评估仅定性；本仓自建 sigmoid DPO。
+- 图像字节 hash 80/10/10，completion-only 双层 mask，policy/ref 参数空间互斥。
+- `win_rate` / `reward_accuracy` 是隐式奖励 pairwise，不是外部 RM 或人工偏好。
+- 与 MPO 共享偏好 split 算法，但基座不同，不能归因算法差异。
+
+```bash
+make dpo-dry-run
+make dpo-suite-dry-run
+make dpo-export-dry-run
+```
+
+</details>
+
+<details>
+<summary>Qwen2.5-VL MPO：三损失消融</summary>
+
+- 上游用未 pin 的 TRL 源码安装，显式 `bf16=False` 与量化 `bfloat16` 矛盾；本仓如实登记，不静默修正。
+- `sigmoid` / `bco_pair` / `sft` 权重 0.8 / 0.2 / 1.0；`full` / `sigmoid_only` / `no_sft` 只在本篇 Qwen backbone 内消融。
+- 与 DPO 共享偏好 split；`cross_backbone_attribution_valid=false`。
+- 一手 MPO 论文仍 unverified，只作补充。
+
+```bash
+make mpo-dry-run
+make mpo-suite-dry-run
+make mpo-export-dry-run
+```
+
+</details>
+
+其余 6 篇为 4 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
 
 ## 完整方法覆盖与实施队列
 

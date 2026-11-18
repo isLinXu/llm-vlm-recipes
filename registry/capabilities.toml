@@ -1,6 +1,6 @@
 # 本地时点事实；不推断上游现状，不把配方登记或 dry-run 当成能力实现。
 schema = 1
-assessed_at = "2026-11-13"
+assessed_at = "2026-11-18"
 expected_recipe_count = 14
 dimensions = ["data", "train", "eval", "comparison", "export"]
 
@@ -119,8 +119,8 @@ id = "wave4"
 label = "DPO / MPO shared backbone"
 dependencies = ["wave2", "wave3"]
 prerequisites = "同一可用 SFT checkpoint、processor、偏好 split、reference 策略与预算冻结。"
-work = "文本/VLM preference collator、chosen/rejected mask、DoRA 与 frozen ref model；MPO sigmoid/bco_pair/sft 三损失装配与消融。"
-acceptance = "DPO vs MPO 必须 shared backbone，现有不同模型的两篇不能直接归因算法；beta/loss/权重显式配置，3 seeds 配对对照、ref 无梯度且复载等价。"
+work = "smolvlm-dpo-v1 / qwen25vl-mpo-v1 五维代码已齐备：图像偏好 hash 隔离、显式 beta/三损失、冻结 ref、隐式奖励 pairwise 与发布级套件/导出；task_router 已精确注册。两篇基座不同，cross_backbone_attribution_valid=false，不能把指标差归因算法。"
+acceptance = "DPO vs MPO 必须 shared backbone 才能算法归因；beta/loss/权重显式配置，3 seeds 配对对照、ref 无梯度且复载等价；当前仅离线合成证据，须冻结 revision 与 CUDA 三 seed 后才称 research baseline。"
 [[waves]]
 id = "wave5"
 label = "vLLM / agent RL"
@@ -194,11 +194,11 @@ export = { status = "implemented", implementation = ["src/recipe_lab/fim_export.
 
 [recipes."vlm/dpo/smolvlm-rlaif-v"]
 wave = "wave4"
-data = { status = "missing", note = "缺图像偏好 chosen/rejected collator、共享 image processor、assistant mask 与图像级去重划分。" }
-train = { status = "missing", note = "缺 DPO 实装、显式 beta/loss/长度/学习率、DoRA 策略和 frozen ref model；不得擅自把原配方改成 DoRA 对照。" }
-eval = { status = "missing", note = "缺 held-out 偏好胜率/任务准确率、长度偏置与视觉一致性评估。" }
-comparison = { status = "missing", note = "缺与 MPO shared backbone/相同偏好 split、ref/DoRA/预算的配对 3 seeds 对照；原两篇模型不同不可直接归因方法。" }
-export = { status = "missing", note = "缺 policy adapter/base、processor、reference 配置打包复载与视觉偏好回归。" }
+data = { status = "implemented", implementation = ["src/recipe_lab/dpo_task.py", "src/recipe_lab/preference_common.py"], tests = ["tests/test_preference.py"], note = "自建 smolvlm-dpo-v1：严格 prompt/chosen/rejected/images schema；图像原始 mode+tobytes() SHA256 的 80/10/10 同图隔离，规范化内容全局去重与空 split 拒绝；与 MPO 共享偏好 split 算法与 data_seed，但 backbone 不同故 cross_backbone_attribution_valid=false。仅离线合成图像验证，未加载真实 rlaif-v、revision/许可未确认。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/dpo_task.py", "runner/train.py"], tests = ["tests/test_preference.py"], note = "普通 Trainer + 自建显式 beta=0.1 sigmoid DPO loss（不依赖未固定 TRL 源码）；policy/ref 仅在 completion token 上计 logprob，image placeholder 与 padding label=-100；nf4/DoRA、显式冻结 ref、policy/ref 参数空间互斥校验；full=150/smoke=5。仅 fake runtime 离线验证，无 CUDA 实跑。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/dpo_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_preference.py"], note = "held-out 逐题隐式奖励 pairwise：win_rate/reward_accuracy 从 policy/ref logprob 重算，不是外部 RM 或人工偏好；chosen/rejected 绝不进生成 prompt；长度偏置分桶登记。指标不等于人类偏好一致率或业务验收；GPU verified 0。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/dpo_suite.py", "runner/suite.py"], tests = ["tests/test_preference.py"], note = "三互异独立训练 seed 的 held-out 聚合；逐题从 eval_manifest 重建偏好对并重算隐式奖励指标，Student-t95；明确 cross_backbone_attribution_valid=false，不与 MPO 篇做算法消融。不回填 expected/tolerance、不自动晋级 B2。仅离线合成证据。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/dpo_export.py", "runner/export.py"], tests = ["tests/test_preference.py"], note = "adapter-only 包：冻结 base/processor identity、显式 beta/双层 mask、base_weights_bundled=false、ref_weights_bundled=false、license pending；HF offline 新进程复载复评。真实 recipe 未预声明 export_tolerance，--full 失败关闭。" }
 
 [recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
 wave = "wave5"
@@ -210,11 +210,11 @@ export = { status = "missing", note = "缺视觉 processor/image 输入协议与
 
 [recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
 wave = "wave4"
-data = { status = "missing", note = "缺图像 preference collator 与 chosen/rejected/assistant mask，需和 DPO 共享冻结偏好 split。" }
-train = { status = "missing", note = "缺 sigmoid/bco_pair/sft 三损失与 [0.8,0.2,1.0] 权重实装、4bit/DoRA、reference 模型与显式精度校验。" }
-eval = { status = "missing", note = "缺三损失分量日志、偏好/视觉任务 held-out 指标与 ref/policy 分离检查。" }
-comparison = { status = "missing", note = "缺 shared backbone DPO vs MPO 与三损失消融、同 DoRA/预算的 3 seeds aggregate。" }
-export = { status = "missing", note = "缺 DoRA/4bit 复载兼容包与 processor、三损失配置追踪和指标回归。" }
+data = { status = "implemented", implementation = ["src/recipe_lab/mpo_task.py", "src/recipe_lab/preference_common.py"], tests = ["tests/test_preference.py"], note = "自建 qwen25vl-mpo-v1：与 DPO 共享偏好 split 算法与 data_seed（图像 hash 80/10/10），schema/去重/空 split 失败关闭相同；cross_backbone_attribution_valid=false。仅离线合成证据，未加载真实 rlaif-v。" }
+train = { status = "implemented", implementation = ["src/recipe_lab/mpo_task.py", "runner/train.py"], tests = ["tests/test_preference.py"], note = "普通 Trainer + 自建 sigmoid/bco_pair/sft 加权和（默认 0.8/0.2/1.0）；config_recipe 派生 full/sigmoid_only/no_sft 三消融且只在同一 Qwen backbone 内；如实登记 bf16=False 与量化 compute dtype=bfloat16 矛盾，不静默修正；冻结 ref、DoRA/nf4。仅 fake runtime，无 CUDA 实跑。" }
+eval = { status = "implemented", implementation = ["src/recipe_lab/mpo_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_preference.py"], note = "held-out 隐式奖励 pairwise 与三损失分量日志；chosen/rejected 不进生成 prompt；指标不是外部 RM/人工偏好。GPU verified 0。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/mpo_suite.py", "runner/suite.py"], tests = ["tests/test_preference.py"], note = "3 消融 × 3 独立训练 seed 网格；逐题隐式奖励重算与 Student-t95；不把 DPO 篇当算法对照（cross_backbone_attribution_valid=false）。不回填 expected/tolerance、不自动晋级 B2。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/mpo_export.py", "runner/export.py"], tests = ["tests/test_preference.py"], note = "选中消融 config 的 DoRA/4bit adapter-only 包；声明三损失身份、精度矛盾、ref 不打包、license pending；HF offline 复载。真实 recipe 未预声明 export_tolerance，--full 失败关闭。" }
 
 [recipes."vlm/sft/granite-vision-line-comparison"]
 wave = "wave3"

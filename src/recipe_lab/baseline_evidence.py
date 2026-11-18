@@ -72,9 +72,22 @@ def fingerprint(r):
         payload["paligemma"] = r.get("paligemma")
         payload["upstream"] = r.get("upstream")
         payload["modality_contract"] = r.get("modality_contract")
+    # wave4 自建偏好协议把 beta/ref 或三损失/消融、图像 hash 划分、双层 label mask 与
+    # 隐式奖励 pairwise 定义写在 [preference] / [upstream] / [modality_contract]；
+    # MPO 还把当前 config_id 写进身份。不绑定这些段，改 beta 或消融权重后旧
+    # checkpoint 仍能凭同一 fingerprint 冒充当前实验产物。
+    if r.get("preference") is not None:
+        payload["preference"] = r.get("preference")
+        payload["upstream"] = r.get("upstream")
+        payload["modality_contract"] = r.get("modality_contract")
+        if r.get("loss") is not None:
+            payload["loss"] = r.get("loss")
+        if r.get("execution.config_id") is not None:
+            payload["config_id"] = r.get("execution.config_id")
     payload["task_id"] = r.get("execution.task_id")
     payload["evaluation"] = {key: r.get("evaluation." + key) for key in ("metrics", "split", "seed")}
-    if any(r.get(name) is not None for name in ("fim", "xlam", "rapidfire", "granite", "paligemma")):
+    if any(r.get(name) is not None for name in ("fim", "xlam", "rapidfire", "granite", "paligemma",
+                                                "preference")):
         payload["evaluation"]["max_new_tokens"] = r.get("evaluation.max_new_tokens")
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
@@ -137,6 +150,12 @@ def frozen_environment(r):
             # 不依赖 trl / bitsandbytes；要求它们会让真实 frozen lock 永远失配。
             "paligemma-grounding-v1": {"torch", "transformers", "datasets", "peft",
                                         "safetensors"},
+            # DPO / MPO 都是普通 Trainer + 4bit/DoRA + AutoProcessor + safetensors 严格复载，
+            # 不依赖 trl（自建 loss 不依赖未固定 TRL 源码）。
+            "smolvlm-dpo-v1": {"torch", "transformers", "datasets", "peft",
+                               "bitsandbytes", "safetensors"},
+            "qwen25vl-mpo-v1": {"torch", "transformers", "datasets", "peft",
+                                "bitsandbytes", "safetensors"},
         }.get(r.get("execution.task_id"))
         if required is None:
             # 未声明发布级 task_id 的任务按协议段判定：RapidFire 是 Trainer + fp16 LoRA，
@@ -144,7 +163,7 @@ def frozen_environment(r):
             # 普通 LoRA，三者都不依赖 trl；未知 recipe 仍按数学默认集合失败关闭。
             if r.get("rapidfire") is not None or r.get("paligemma") is not None:
                 required = {"torch", "transformers", "datasets", "peft", "safetensors"}
-            elif r.get("granite") is not None:
+            elif r.get("granite") is not None or r.get("preference") is not None:
                 required = {"torch", "transformers", "datasets", "peft",
                             "bitsandbytes", "safetensors"}
             else:
@@ -232,10 +251,10 @@ def runtime_consistent(r, evidence):
 def evaluation_problems(r, data, path, *, role, manifest=None):
     task = _task(r)
     if task in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
         # FIM 用 PSM 输入/gold 重建器，xLAM 用严格 JSON prompt/tools/gold 重建器，
         # RapidFire 用 completion-only 5 列 raw / 无 stemmer ROUGE-L 重建器；
-        # 三者都不套用数学 1500 题协议，也不互相借用。
+        # DPO/MPO 用偏好对 raw + 隐式奖励 pairwise 重建器；都不套用数学协议，也不互相借用。
         from .task_router import load
         return load(r, "suite").evaluation_problems(r, data, path, role=role, manifest=manifest)
     if task != "math-grpo-v1":
@@ -290,7 +309,7 @@ def suite_problems(r):
 def _suite_problems(r):
     task = _task(r)
     if task in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
         from .task_router import load
         return load(r, "suite").suite_problems(r)
     if task != "math-grpo-v1":
@@ -398,7 +417,7 @@ def zero_train_measured(r):
         # 其余任务不得靠通用 JSON 走到 return True。
         if _task(r) not in ("math-grpo-v1", "code-fim-v1", "xlam-fc-v1",
                             "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
             return False
         data, path = read_json(r, "baseline.measurement")
         valid = (data is not None and type(data.get("schema_version")) is int and data["schema_version"] == 1
@@ -407,7 +426,7 @@ def zero_train_measured(r):
         if not valid:
             return False
         if _task(r) in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
             from .task_router import load
             load(r, "suite").zero_train_validation(r, data, path)
             return True

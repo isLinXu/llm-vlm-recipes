@@ -144,7 +144,7 @@ rationale = "StarCoder FIM 是代码填充垂直领域适配；三段式 FIM 模
 [recipes."vlm/dpo/smolvlm-rlaif-v"]
 primary = ["preference_calibration"]
 secondary = []
-rationale = "RLAIF-V 直接对应多模态 AI 反馈偏好校准；当前仅 cataloged，无五维实现。"
+rationale = "RLAIF-V 直接对应多模态 AI 反馈偏好校准；五维已实现但无 GPU 证据，且与 MPO 篇非 shared backbone，不能归因算法差异。"
 
 [recipes."vlm/grpo/qwen2-5-vl-3b-visual-reasoning"]
 primary = ["reasoning_enhancement"]
@@ -154,7 +154,7 @@ rationale = "Qwen2.5-VL 视觉 GRPO 对应多步视觉/空间推理增强；当�
 [recipes."vlm/mpo/qwen2-5-vl-3b-mpo"]
 primary = ["preference_calibration"]
 secondary = []
-rationale = "MPO 基于 DPO 多损失组合，属于偏好校准；当前未实现，且一手 MPO 论文未核实。"
+rationale = "MPO 基于 DPO 多损失组合，属于偏好校准；五维已实现但无 GPU 证据，一手 MPO 论文未核实，且与 DPO 篇非 shared backbone。"
 
 [recipes."vlm/sft/granite-vision-line-comparison"]
 primary = ["instruction_following"]

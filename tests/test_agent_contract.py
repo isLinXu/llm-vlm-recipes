@@ -46,12 +46,12 @@ def test_real_contract_is_clean(real_audit):
 def test_facts_are_read_from_existing_audits(real_audit):
     f = real_audit.facts
     assert f["recipes"] == 14
-    assert f["implemented_recipes"] == 6
+    assert f["implemented_recipes"] == 8
     assert f["gpu_verified"] == 0
     assert f["eligible"] == 0
     assert f["post_training_directions"] == 5
-    assert f["implemented_directions"] == 4
-    assert f["gap_directions"] == 1
+    assert f["implemented_directions"] == 5
+    assert f["gap_directions"] == 0
 
 
 def test_sources_of_truth_are_present(real_audit):

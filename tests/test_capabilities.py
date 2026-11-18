@@ -60,18 +60,19 @@ def test_actual_registry_exact_coverage_and_counts():
     result = cap.audit(ROOT, recipes)
     assert result.ok, result.errors
     assert result.registered_recipes == result.capability_entries == 14
-    # 六篇五维齐备（数学/FIM/xLAM/RapidFire/Granite/PaliGemma）；implemented 只表示
+    # 八篇五维齐备（数学/FIM/xLAM/RapidFire/Granite/PaliGemma/DPO/MPO）；implemented 只表示
     # 代码 + offline test，GPU 实测与 completed 证据仍为 0，不得据此晋级 B2/B3。
-    assert result.implemented_recipes == 6 and result.gpu_verified_recipes == 0
-    assert result.totals == {"missing": 40, "implemented": 30, "unverified": 0, "verified": 0}
-    per_dimension = {dimension: {"missing": 8, "implemented": 6, "unverified": 0, "verified": 0}
+    assert result.implemented_recipes == 8 and result.gpu_verified_recipes == 0
+    assert result.totals == {"missing": 30, "implemented": 40, "unverified": 0, "verified": 0}
+    per_dimension = {dimension: {"missing": 6, "implemented": 8, "unverified": 0, "verified": 0}
                      for dimension in cap.DIMENSIONS}
     for dimension in cap.DIMENSIONS:
         assert result.counts[dimension] == per_dimension[dimension]
     full = {MATH_ID, "llm/sft/starcoder1b-fim",
             "llm/sft/llama3-8b-xlam-function-calling", "llm/sft/rapidfire-multiconfig",
             "vlm/sft/granite-vision-line-comparison",
-            "vlm/sft/paligemma2-refcoco-grounding"}
+            "vlm/sft/paligemma2-refcoco-grounding",
+            "vlm/dpo/smolvlm-rlaif-v", "vlm/mpo/qwen2-5-vl-3b-mpo"}
     for rid, row in result.rows.items():
         if rid in full:
             assert all(cell["status"] == "implemented" for cell in row.values())
@@ -126,7 +127,7 @@ def test_fake_implemented_file_contract_rejected(sandbox, field, value):
     result = cap.audit(sandbox.root, sandbox.recipes)
     assert not result.ok and any(f"{MATH_ID}/train:" in error for error in result.errors)
     assert result.rows[MATH_ID]["train"]["status"] == "missing"
-    assert result.counts["train"]["implemented"] == 5  # FIM / xLAM / RapidFire / Granite / PaliGemma 不受数学单元拒绝影响
+    assert result.counts["train"]["implemented"] == 7  # 其余七篇五维齐备不受数学单元拒绝影响
     assert result.counts["train"]["verified"] == 0
 
 
@@ -228,10 +229,10 @@ def test_valid_evidence_schema_does_not_implicitly_promote_other_dimensions(sand
     promote(sandbox, "eval")
     result = cap.audit(sandbox.root, sandbox.recipes)
     assert result.ok and result.gpu_verified_recipes == 1
-    assert result.implemented_recipes == 6  # 六篇五维代码齐备（含 Granite / PaliGemma 发布级两维）
-    # 六篇的 comparison/export 登记 implemented（只有代码，无 GPU 证据）；
+    assert result.implemented_recipes == 8  # 八篇五维代码齐备（含 Granite / PaliGemma / DPO / MPO）
+    # 八篇的 comparison/export 登记 implemented（只有代码，无 GPU 证据）；
     # 数学单篇的 verified 提升不改变其他篇的代码登记状态。
-    assert result.counts["comparison"]["missing"] == result.counts["export"]["missing"] == 8
+    assert result.counts["comparison"]["missing"] == result.counts["export"]["missing"] == 6
     assert result.counts["comparison"]["verified"] == result.counts["export"]["verified"] == 0
     assert "不自动更新 B2/B3" in cap.render(sandbox.root, sandbox.recipes)
 
@@ -248,11 +249,12 @@ def test_unverified_and_completed_path_do_not_implicitly_promote(sandbox):
     cell["status"] = "unverified"
     result = cap.audit(sandbox.root, sandbox.recipes)
     assert result.ok and result.counts["train"]["unverified"] == 1
-    assert result.counts["train"]["implemented"] == 5  # FIM / xLAM / RapidFire / Granite / PaliGemma 不受数学单元拒绝影响
+    # 其余七篇五维齐备的 train 维不受数学单元拒绝影响
+    assert result.counts["train"]["implemented"] == 7
     assert result.counts["train"]["verified"] == 0
     cell["status"] = "implemented"
     result = cap.audit(sandbox.root, sandbox.recipes)
-    assert result.ok and result.counts["train"]["implemented"] == 6
+    assert result.ok and result.counts["train"]["implemented"] == 8
     assert result.counts["train"]["verified"] == 0
 
 
@@ -296,7 +298,7 @@ def test_taxonomy_missing_families_dynamic_and_not_scope_backlog(sandbox):
     recipe.data["method"]["family"] = "kto"
     changed = cap.audit(sandbox.root, sandbox.recipes)
     assert changed.ok and "kto" not in changed.missing_families
-    assert changed.counts["train"]["implemented"] == 6
+    assert changed.counts["train"]["implemented"] == 8
     with (sandbox.root / "registry/taxonomy.toml").open("a", encoding="utf-8") as handle:
         handle.write('\n[families.local-test]\ntrainer = "LocalTrainer"\ntier = "external"\n')
     assert "local-test" in cap.audit(sandbox.root, sandbox.recipes).missing_families
@@ -340,8 +342,9 @@ def test_report_complete_bounded_deterministic_and_read_only():
         "五维能力计数", "逐篇能力矩阵", "具体缺失", "方法缺口", "Scope", "实施顺序",
         "dependencies", "验收条款", "zero train", "smoke", "3 train seeds", "held-out",
         "aggregate", "export reload", "business", "会话回收", "权重同步", "schema masker",
-        "GSM8K 4 reward", "隔离执行评估", "ref model", "预渲染", "三损失", "assistant",
+        "GSM8K 4 reward", "隔离执行评估", "冻结 ref", "预渲染", "三损失", "assistant",
         "bbox", "loc", "4bit/LoRA", "4bit/DoRA", "污染", "0:500", "500:1000", "1000:1500",
+        "cross_backbone_attribution_valid=false",
     ):
         assert phrase in report, phrase
     assert "src/recipe_lab/math_task.py" in report and "tests/test_math_task.py" in report
