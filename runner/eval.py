@@ -20,6 +20,7 @@ from recipe_lab.loader import load_recipes
 from recipe_lab import dpo_task as dpo_adapter
 from recipe_lab import fim_task as fim_adapter
 from recipe_lab import granite_task as granite_adapter
+from recipe_lab import gsm8k_task as gsm8k_adapter
 from recipe_lab import mpo_task as mpo_adapter
 from recipe_lab import paligemma_task as paligemma_adapter
 from recipe_lab import rapidfire_task as rapidfire_adapter
@@ -35,6 +36,7 @@ TASK_ADAPTERS = {
     dpo_adapter.RECIPE_ID: dpo_adapter,
     fim_adapter.RECIPE_ID: fim_adapter,
     granite_adapter.RECIPE_ID: granite_adapter,
+    gsm8k_adapter.RECIPE_ID: gsm8k_adapter,
     mpo_adapter.RECIPE_ID: mpo_adapter,
     paligemma_adapter.RECIPE_ID: paligemma_adapter,
     xlam_adapter.RECIPE_ID: xlam_adapter,

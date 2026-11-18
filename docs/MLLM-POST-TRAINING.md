@@ -37,7 +37,7 @@
 | `agent/grpo/wordle-openenv-hf-jobs` | `reasoning_enhancement` | `scalable_learning` | not_implemented | not_implemented | 是 | Wordle 环境交互 + GRPO 可验证奖励，属于推理增强；在线环境采样也触及效率与扩展问题。当前仅 cataloged。 |
 | `llm/grpo/qwen2-0-5b-numinamath` | `reasoning_enhancement` | - | five_dimension_implemented | pending_freeze | 是 | 数学 GRPO 使用 format/accuracy reward 与 math_verify，是文本可验证奖励推理增强样板；五维已实现但无 GPU 证据。 |
 | `llm/grpo/qwen2-0-5b-vllm-colocate` | `scalable_learning` | `reasoning_enhancement` | not_implemented | not_implemented | 是 | vLLM colocate 关注 GRPO 训练中的推理引擎共置与资源效率，主方向是可扩展学习，辅方向是推理增强；当前未实现。 |
-| `llm/grpo/qwen2-5-3b-advanced-reward` | `reasoning_enhancement` | `preference_calibration` | not_implemented | not_implemented | 是 | 高级奖励设计服务多步推理，奖励塑形同时带有偏好校准色彩；当前未实现。 |
+| `llm/grpo/qwen2-5-3b-advanced-reward` | `reasoning_enhancement` | `preference_calibration` | not_implemented | partial_implementation | 是 | 高级奖励设计服务多步推理，奖励塑形同时带有偏好校准色彩；当前未实现。 |
 | `llm/sft/llama3-8b-xlam-function-calling` | `instruction_following` | `domain_adaptation` | five_dimension_implemented | pending_freeze | 是 | xLAM function-calling SFT 按严格 JSON 调用协议遵循指令，同时是工具调用垂直领域适配；五维已实现但无 GPU 证据。 |
 | `llm/sft/rapidfire-multiconfig` | `instruction_following` | `scalable_learning` | five_dimension_implemented | pending_freeze | 是 | RapidFire 客服问答 SFT 是指令遵循样板；4 配置网格与顺序成本对照触及可扩展学习，不冒充并发加速。 |
 | `llm/sft/starcoder1b-fim` | `domain_adaptation` | `instruction_following` | five_dimension_implemented | pending_freeze | 是 | StarCoder FIM 是代码填充垂直领域适配；三段式 FIM 模板仍属指令/输入格式遵循。五维已实现但无 GPU 证据。 |

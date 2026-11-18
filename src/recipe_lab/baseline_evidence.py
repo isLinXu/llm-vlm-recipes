@@ -84,6 +84,10 @@ def fingerprint(r):
             payload["loss"] = r.get("loss")
         if r.get("execution.config_id") is not None:
             payload["config_id"] = r.get("execution.config_id")
+    # GSM8K 自建协议把拆分规则、gold 分隔符、近似档容差与 accuracy / reward hacking 定义
+    # 写在 [gsm8k]；不绑定，改了拆分或定义后旧 checkpoint 仍能冒充当前实验产物。
+    if r.get("gsm8k") is not None:
+        payload["gsm8k"] = r.get("gsm8k")
     payload["task_id"] = r.get("execution.task_id")
     payload["evaluation"] = {key: r.get("evaluation." + key) for key in ("metrics", "split", "seed")}
     if any(r.get(name) is not None for name in ("fim", "xlam", "rapidfire", "granite", "paligemma",

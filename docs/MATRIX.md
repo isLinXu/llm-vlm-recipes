@@ -2,7 +2,7 @@
 
 > 由 `recipe-lab matrix` 自动生成，请勿手工编辑。单一事实源是各 `recipes/**/recipe.toml`。
 
-当前登记 **14** 篇 · 验证层级 L0–L3 · **0** error / **11** warning / **24** info。
+当前登记 **14** 篇 · 验证层级 L0–L3 · **0** error / **12** warning / **24** info。
 
 状态机：`cataloged` → `ported` → `smoke-passed` → `benchmarked`。
 
@@ -13,7 +13,7 @@
 | `agent/grpo/wordle-openenv-hf-jobs` | grpo | GRPOTrainer | llm | Qwen/Qwen3-0.6B | OpenEnv Wordle（在线生成，无静态数据集） | ported | params | L0 | B1 | unmeasured | - | 0 |
 | `llm/grpo/qwen2-0-5b-numinamath` | grpo | GRPOTrainer | llm | Qwen/Qwen2-0.5B-Instruct | AI-MO/NuminaMath-TIR | ported | params | L1 | B1 | unmeasured | 0.14.0 | 0 |
 | `llm/grpo/qwen2-0-5b-vllm-colocate` | grpo | GRPOTrainer | llm | Qwen/Qwen2-0.5B-Instruct | AI-MO/NuminaMath-TIR | ported | params | L1 | B1 | unmeasured | 0.23.1 | 0 |
-| `llm/grpo/qwen2-5-3b-advanced-reward` | grpo | GRPOTrainer | llm | Qwen/Qwen2.5-3B-Instruct | openai/gsm8k | ported | params | L0 | B1 | unmeasured | - | 0 |
+| `llm/grpo/qwen2-5-3b-advanced-reward` | grpo | GRPOTrainer | llm | Qwen/Qwen2.5-3B-Instruct | openai/gsm8k | ported | params | L0 | B1 | unmeasured | 0.14.0 | 0 |
 | `llm/sft/llama3-8b-xlam-function-calling` | sft | Trainer | llm | meta-llama/Meta-Llama-3-8B-Instruct | Salesforce/xlam-function-calling-60k | cataloged | catalog | L0 | B1 | unmeasured | - | 0 |
 | `llm/sft/rapidfire-multiconfig` | hpo | Trainer | llm | gpt2 | bitext/Bitext-customer-support-llm-chatbot-training-dataset | cataloged | catalog | L0 | B1 | unmeasured | - | 0 |
 | `llm/sft/starcoder1b-fim` | sft | Trainer | llm | bigcode/starcoderbase-1b | smangrul/hf-stack-v1 | cataloged | catalog | L0 | B1 | unmeasured | - | 0 |
@@ -54,7 +54,7 @@
 | trl | 篇数 | recipe |
 | --- | --- | --- |
 | `0.12.2` | 1 | `vlm/dpo/smolvlm-rlaif-v` |
-| `0.14.0` | 1 | `llm/grpo/qwen2-0-5b-numinamath` |
+| `0.14.0` | 2 | `llm/grpo/qwen2-0-5b-numinamath`, `llm/grpo/qwen2-5-3b-advanced-reward` |
 | `0.22.0.dev0` | 2 | `vlm/sft/qwen2-vl-7b-chartqa`, `vlm/sft/smolvlm-chartqa` |
 | `0.23.1` | 1 | `llm/grpo/qwen2-0-5b-vllm-colocate` |
 
@@ -65,9 +65,10 @@
 warning 不代表失败，而是已登记、尚未消解的风险。
 
 - `R202` · `llm/grpo/qwen2-0-5b-numinamath` — trl 0.14.0 + transformers 4.47.1 不在已验证组合白名单
+- `R202` · `llm/grpo/qwen2-5-3b-advanced-reward` — trl 0.14.0 + transformers 4.47.1 不在已验证组合白名单
 - `R203` · `vlm/sft/qwen2-vl-7b-chartqa` — `trl = 0.22.0.dev0` 是预发布/dev 版本，通常需要从源码安装
 - `R203` · `vlm/sft/smolvlm-chartqa` — `trl = 0.22.0.dev0` 是预发布/dev 版本，通常需要从源码安装
-- `R204` · `GLOBAL` — 仓库内存在 4 个不同 trl 版本：0.12.2 (1 篇), 0.14.0 (1 篇), 0.22.0.dev0 (2 篇), 0.23.1 (1 篇)
+- `R204` · `GLOBAL` — 仓库内存在 4 个不同 trl 版本：0.12.2 (1 篇), 0.14.0 (2 篇), 0.22.0.dev0 (2 篇), 0.23.1 (1 篇)
 - `R303` · `agent/grpo/wordle-openenv-hf-jobs` — 零训练基线尚未测量
 - `R303` · `llm/grpo/qwen2-0-5b-numinamath` — 零训练基线尚未测量
 - `R303` · `llm/grpo/qwen2-0-5b-vllm-colocate` — 零训练基线尚未测量

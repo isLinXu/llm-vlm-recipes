@@ -133,6 +133,11 @@ def build_plan(r: Recipe, mode: str = "dry-run") -> dict[str, Any]:
         # 分派到 mpo_suite / mpo_export。
         from .mpo_task import task_plan
         return task_plan(r, plan, mode)
+    if r.id == "llm/grpo/qwen2-5-3b-advanced-reward":
+        # wave5a：GSM8K 四 reward 的 data/train/eval 三维；comparison/export 未实装，
+        # 不注册 task_router，发布级套件/导出显式 unavailable。
+        from .gsm8k_task import task_plan
+        return task_plan(r, plan, mode)
     plan["execution_supported"] = False
     plan["unsupported_reason"] = "该任务的数据/训练/评估适配尚未实现；dry-run 仅输出声明"
     return plan

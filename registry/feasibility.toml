@@ -24,6 +24,10 @@
 # 由 not_implemented 改为 pending_freeze（ADR-027）——自建偏好协议只有
 # macOS ARM 隔离合成证据；两篇基座不同，不得跨 backbone 归因算法；
 # revision / CUDA 三 seed / 容差 / 许可全未完成。eligible 0/14 与 ChartQA 阻塞不变。
+# 2026-11-18 第五次重新判定：GSM8K advanced-reward 篇实装 data/train/eval 三维后由
+# not_implemented 改为 partial_implementation（ADR-028）——四 reward、#### gold 剥离、
+# 独立严格 verifier 与 hacking 诊断已有离线测试；comparison/export 未实装、未注册
+# task_router；一手页面本轮未能取回，分档/标签/超参为本仓选择。eligible 0/14 不变。
 
 schema = 1
 assessed_at = "2026-11-18"
@@ -65,11 +69,11 @@ requires = ["实现只改 use_vllm 的单变量对照", "同 checkpoint/test/采
 primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
 
 [recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
-verdict = "not_implemented"
-reason = "GSM8K #### gold 提取、四个 reward 函数、完整超参冻结与官方 test 的 verifier 均未实现；四 reward 逐项消融也缺失。"
-blockers = ["无 GSM8K prompt/gold 剥离与官方 split 冻结", "四 reward 与失败路径未实装", "无格式/长度/reward hacking 诊断"]
-requires = ["实现四 reward 与完整显式超参", "同预算 zero-shot/GRPO 与 reward 消融", "官方 test 的独立验收与复载"]
-primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
+verdict = "partial_implementation"
+reason = "wave5a：gsm8k-reward-v1 的 data/train/eval 三维已有自建协议、真实任务代码与隔离离线测试——#### gold 规范化剥离且不进 prompt、官方 test 1319 题整体 held-out 与 question-hash 90/10 train/validation、四 reward 完整实装、21 个 GRPOConfig 超参显式冻结、独立严格 Decimal verifier 与 reward hacking 诊断。但 comparison（四 reward 逐项消融、同预算 zero-shot/GRPO、多 seed 聚合）与 export（打包与 HF offline 复载）未实装，发布级路由未注册；一手页面本轮未能重新取回，分档条件/标签/超参为本仓选择，不冒充上游。全部只有 macOS ARM 离线合成证据：无 CUDA 实跑、无 completed 证据。"
+blockers = ["comparison/export 两维未实装，task_router 未注册，发布级套件/导出 unavailable", "model/dataset/source revision 与可安装镜像锁未冻结，frozen lock 仍为模板", "四 reward 等权相加未经逐项消融，分档条件/标签/超参尚未回一手页面核对", "GPU verified 0，无真实 completed training/evaluation 证据"]
+requires = ["实装 comparison：drop-one 四 reward 消融 × 三独立训练 seed、同预算 zero-shot/GRPO 与聚合", "实装 export：模型 + reward 配置 + tokenizer 打包与 HF offline 新进程复载，并精确注册 task_router", "回一手页面核对四 reward 分档/标签/超参并显式改写偏差", "授权 Linux CUDA 环境冻结全部 revision、实跑三 seed，基于实跑预声明容差后独立验收"]
+primary_source = "https://huggingface.co/learn/cookbook/trl_grpo_reasoning_advanced_reward；registry/evidence.toml"
 
 [recipes."llm/sft/llama3-8b-xlam-function-calling"]
 verdict = "pending_freeze"

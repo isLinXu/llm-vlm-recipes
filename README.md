@@ -279,7 +279,20 @@ make mpo-export-dry-run
 
 </details>
 
-其余 6 篇为 4 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
+<details>
+<summary>GSM8K 四 reward GRPO（partial：仅 data/train/eval 三维）</summary>
+
+- `llm/grpo/qwen2-5-3b-advanced-reward` / 自建 `gsm8k-reward-v1`（非上游复现，档位/标签/超参为本仓选择）。
+- `####` gold 剥离并 Decimal 规范化；官方 train 90/10 hash 切分，官方 test 1319 题整体 held-out；独立严格校验器，输出 `reward_hacking_rate`。
+- comparison（drop-one 消融）与 export 缺失；未注册 task_router，发布级套件 unavailable。
+
+```bash
+make gsm8k-dry-run
+```
+
+</details>
+
+其余 6 篇为 1 篇 `partial_implementation`（GSM8K 三维）+ 3 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
 
 ## 完整方法覆盖与实施队列
 
