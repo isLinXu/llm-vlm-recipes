@@ -1,0 +1,866 @@
+# 垂类后训练算力 / 数据规模规划登记（事实源，手写；docs/COMPUTE-PLANNING.md 为人类可读表）
+#
+# 诚信边界（与 AGENTS.md 一致）：
+# - 本文件只做「规划」，不是 GPU 实跑证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 不变。
+# - 实测锚点（[[anchor]] / [[vllm_colocate_row]]）只收录上游 recipe/论文自带数字；其余数值均为工程估算（estimate=true）。
+# - 任何论文 / 配方都没有给出「GPU 利用率 %」；[[utilization_band]] 全部是估算区间，必须用 5 步 smoke 实测校准。
+# - 不得用本文件的估算当作 B3 业务档验收依据。
+
+[meta]
+schema = "compute-planning/v1"
+estimates_are_not_evidence = true
+gpu_verified = 0
+min_independent_seeds_for_release = 3
+seed_budget_note = "发布级对比要求 ≥3 个独立训练 seed（Student-t95）；多配置套件（RapidFire 4×3+1=13 次、MPO 3×3+1=10 次、GSM8K 5×3+1=16 次）总算力约为单次的 10–16 倍。"
+grpo_batch_semantics = "本仓 GRPO 校验 per_device_train_batch_size % num_generations == 0，即 batch 按 completions 计数；每 optimizer step 的 prompt 数 = micro_batch × grad_accum ÷ num_generations。TRL 不同版本语义不同，换版本须复核。"
+
+# ───────────────────────── 显存估算规则（仅权重 + 优化器状态，GB） ─────────────────────────
+# weights_gb = coef_per_b × 参数量(B) + const_gb；推荐显存 = weights_gb × headroom（覆盖激活 / KV / 碎片）。
+# 全部是估算：不含 vLLM 引擎显存；长序列、大 micro-batch、VLM 图像 token 会显著突破 headroom。
+[memory]
+headroom = 1.4
+single_card_tiers_gb = [24, 40, 48, 80]
+multi_card_assume_gb = 80
+multi_card_note = "多卡下限 = ceil(推荐显存 ÷ 80)，假设 ZeRO-3 / FSDP 均分状态，不含通信缓冲与不均衡；实际需 +1 卡余量并用 smoke 复核。"
+estimate = true
+
+[[memory_rule]]
+id = "qlora_sft"
+label = "QLoRA SFT（4bit 底座 + LoRA/DoRA）"
+coef_per_b = 0.65
+const_gb = 0.8
+anchor = "QLoRA 论文（2305.14314）：65B 单卡 48GB 可微调（0.65×65+0.8≈43GB 权重，余量给激活）"
+
+[[memory_rule]]
+id = "lora_bf16"
+label = "LoRA SFT（bf16/fp16 2-byte 底座）"
+coef_per_b = 2.0
+const_gb = 1.0
+anchor = ""
+
+[[memory_rule]]
+id = "full_sft"
+label = "全参 SFT（bf16 + AdamW fp32 状态）"
+coef_per_b = 16.0
+const_gb = 0.0
+anchor = "2P 权重 + 2P 梯度 + 12P 优化器（含 fp32 master / m / v）"
+
+[[memory_rule]]
+id = "dpo_qlora"
+label = "DPO / MPO（QLoRA，policy + 冻结 ref）"
+coef_per_b = 1.3
+const_gb = 0.8
+anchor = ""
+
+[[memory_rule]]
+id = "grpo_lora"
+label = "GRPO（LoRA，bf16；不含 rollout 引擎）"
+coef_per_b = 2.0
+const_gb = 1.0
+anchor = ""
+
+[[memory_rule]]
+id = "grpo_full"
+label = "GRPO（全参，bf16 + AdamW）"
+coef_per_b = 18.0
+const_gb = 0.0
+anchor = "全参 SFT 16P + 冻结参考模型 2P（对应 Qwen2.5-3B GSM8K 全参 GRPO 声明 1× A100 80GB）"
+
+[[matrix_model]]
+id = "0.5B"
+params_b = 0.5
+
+[[matrix_model]]
+id = "1.7B"
+params_b = 1.7
+
+[[matrix_model]]
+id = "3B"
+params_b = 3.0
+
+[[matrix_model]]
+id = "7B"
+params_b = 7.0
+
+[[matrix_model]]
+id = "8B"
+params_b = 8.0
+
+[[matrix_model]]
+id = "14B"
+params_b = 14.0
+
+[[matrix_model]]
+id = "32B"
+params_b = 32.0
+
+[[matrix_model]]
+id = "70B"
+params_b = 70.0
+
+# ───────────────────────── 数据规模阶梯（启发式） ─────────────────────────
+[[tier]]
+id = "step0_smoke"
+name = "S0 冒烟"
+purpose = "只验证管线可跑、日志 / checkpoint / 导出链路通；不看指标"
+sft_samples = "8–32"
+preference_pairs = "8–32"
+rl_prompts = "8–32"
+seeds = 1
+steps_hint = "5 步（仓库 smoke_steps=5）"
+anchors = ["仓库 budget.smoke_steps = 5", "Wordle smoke_n_prompts = 30"]
+heuristic = true
+
+[[tier]]
+id = "step1_pilot"
+name = "S1 试点"
+purpose = "看 loss / reward 是否下降，吞吐校准（得到 s/步、s/rollout）"
+sft_samples = "100–1k"
+preference_pairs = "500–2k"
+rl_prompts = "200–1k"
+seeds = 1
+steps_hint = "30–150 步"
+anchors = ["LIMA 1k 样本对齐（arXiv 2305.11206）", "Wordle 校准 40 rollouts / 92.4 s → 2.31 s/rollout"]
+heuristic = true
+
+[[tier]]
+id = "step2_minimum_viable"
+name = "S2 最小可用"
+purpose = "垂类行为稳定出现；做去重 / 留出集 / 污染检查后再看指标"
+sft_samples = "1k–10k"
+preference_pairs = "2k–10k"
+rl_prompts = "1k–3k"
+seeds = "1–2"
+steps_hint = "150–500 步"
+anchors = ["仓库 GRPO full_steps=150 × 8–16 prompts/step ≈ 1.2k–2.4k prompts", "Wordle full_n_prompts = 3000", "去重 arXiv 2107.06499"]
+heuristic = true
+
+[[tier]]
+id = "step3_baseline"
+name = "S3 基线级"
+purpose = "可对外比较：≥3 独立 seed、Student-t95、零训练基线对照"
+sft_samples = "10k–50k"
+preference_pairs = "10k–50k"
+rl_prompts = "3k–10k"
+seeds = "≥3"
+steps_hint = "500–2000 步 × 3 seed"
+anchors = ["仓库发布门禁：≥3 独立训练 seed", "欠指定 arXiv 2011.03395", "奖励过优化 arXiv 2210.10760"]
+heuristic = true
+
+[[tier]]
+id = "step4_scale"
+name = "S4 放大"
+purpose = "覆盖长尾与分布外；需要数据治理、版本冻结与持续评测"
+sft_samples = "50k–500k+"
+preference_pairs = "50k+"
+rl_prompts = "10k+"
+seeds = "≥3"
+steps_hint = "2000+ 步，常需多卡"
+anchors = ["无统一论文阈值；以 S3 的留出集收益曲线是否仍上升决定是否放大"]
+heuristic = true
+
+# ───────────────────────── P0–P3 垂类实验决策门（来自 Cookbook 调研第 09 章 + R302） ─────────────────────────
+[[stage_gate]]
+id = "P0"
+name = "零训练基线"
+action = "固定 held-out 与定量指标，先跑 prompting / RAG / 结构化生成 / 更大基座"
+exit_gate = "若 P0 已达标（如 ChartQA 零训练即过），按 R302 终止微调，不烧训练算力"
+
+[[stage_gate]]
+id = "P1"
+name = "最小 SFT"
+action = "1B–3B 小模型 + 约 10% 数据（S1–S2 量级），QLoRA r=8，1 epoch，确认数据契约与 completion-only mask"
+exit_gate = "相对 P0 有可测净增量且无泄漏；缺格式/领域知识时优先补数据清洗而非加卡"
+
+[[stage_gate]]
+id = "P2"
+name = "规模化 SFT / 偏好"
+action = "全量数据（S3）、更大基座（7B–32B）、顺序/并发超参网格、≥3 seed 与 Student-t95"
+exit_gate = "画出成本/收益曲线；有 chosen/rejected 偏好且 SFT 偏移时再进 DPO/MPO"
+
+[[stage_gate]]
+id = "P3"
+name = "可验证 RL（可选）"
+action = "先写 reward 失败路径单测，单卡 smoke 校准 rollout 吞吐与 vLLM colocate，再扩至 server/多卡"
+exit_gate = "监控 reward 曲线与独立 verifier 指标（如 reward_hacking_rate）；两者背离立即停止"
+
+# ───────────────────────── 发布级算力乘法表（基于仓库 suite 真实编排） ─────────────────────────
+[[release_multiplier]]
+id = "single_seed_3"
+label = "标准单配置发布套件（Math / FIM / xLAM / Granite / PaliGemma / SmolVLM DPO）"
+configs = 1
+seeds_per_config = 3
+zero_shot_runs = 1
+total_runs = 4
+multiplier_vs_single_train = "3× 训练 + 4× 评测"
+note = "1 次冻结基座 zero-shot + 3 个独立训练 seed（含各自 checkpoint held-out 评测）"
+
+[[release_multiplier]]
+id = "mpo_ablation_suite"
+label = "MPO 三损失消融套件（qwen25vl-mpo-v1）"
+configs = 3
+seeds_per_config = 3
+zero_shot_runs = 1
+total_runs = 10
+multiplier_vs_single_train = "9× 训练 + 10× 评测"
+note = "full / sigmoid_only / no_sft 3 个消融 × 3 seed + 1 次 zero-shot（同一 Qwen2.5-VL backbone）"
+
+[[release_multiplier]]
+id = "rapidfire_grid_suite"
+label = "RapidFire 4 配置网格套件（rapidfire-sft-v1）"
+configs = 4
+seeds_per_config = 3
+zero_shot_runs = 1
+total_runs = 13
+multiplier_vs_single_train = "12× 训练 + 13× 评测（validation 选配置 + test 单次验收）"
+note = "顺序执行 4 配置 × 3 seed；不宣称复现 rapidfireai 16–24× 并发吞吐"
+
+[[release_multiplier]]
+id = "gsm8k_drop_one_suite"
+label = "GSM8K 5 drop-one reward 消融套件（gsm8k-reward-v1）"
+configs = 5
+seeds_per_config = 3
+zero_shot_runs = 1
+total_runs = 16
+multiplier_vs_single_train = "15× 训练 + 16× 评测"
+note = "full / no_format_exact / no_format_approx / no_correctness / no_extraction 5 消融 × 3 seed + 1 次 zero-shot"
+
+# ───────────────────────── 多卡并行策略与硬件起点速查（估算，非实测） ─────────────────────────
+[[parallel_strategy]]
+id = "ddp"
+name = "DDP（纯数据并行）"
+applicable = "单卡放得下完整模型 + 优化器（如 7B QLoRA 多卡扩吞吐）"
+memory_effect = "不切分权重与优化器；单卡显存几乎不降，靠减小 per-card grad_accum 换吞吐"
+batch_rule = "保持 micro_batch × grad_accum × 卡数 = 目标有效 batch"
+estimate = true
+
+[[parallel_strategy]]
+id = "zero2_fsdp_shard_grad"
+name = "DeepSpeed ZeRO-2 / FSDP SHARD_GRAD_OP"
+applicable = "3B–14B LoRA/全参：梯度与优化器显存成为瓶颈，但单卡能放下权重"
+memory_effect = "优化器与梯度按卡数均分，通信开销显著低于 ZeRO-3"
+batch_rule = "同步下调 grad_accum；保持有效 batch 与学习率不变"
+estimate = true
+
+[[parallel_strategy]]
+id = "zero3_fsdp_full"
+name = "DeepSpeed ZeRO-3 / FSDP FULL_SHARD"
+applicable = "14B–70B 全参或 70B bf16 LoRA（单卡权重+状态已超 80GB）"
+memory_effect = "权重 / 梯度 / 优化器全分片；下限 = ceil(推荐显存÷80GB)，建议 +1 卡留通信与 AllGather 峰值余量"
+batch_rule = "尽量维持 micro_batch ≥ 1 并开启 gradient_checkpointing + bf16"
+estimate = true
+
+[[parallel_strategy]]
+id = "grpo_colocate"
+name = "GRPO + vLLM colocate"
+applicable = "单卡或小规模（≤3B–7B QLoRA），生成与训练分时复用同一 GPU"
+memory_effect = "必须给 vLLM 留出 gpu_memory_utilization（如 0.3）；长 completion 吞吐提升 +75%–+100%"
+batch_rule = "micro_batch 必须整除 num_generations；每步 prompt 数 = 有效 batch ÷ num_generations"
+estimate = true
+
+[[parallel_strategy]]
+id = "grpo_server"
+name = "GRPO + vLLM server（trl vllm-serve）"
+applicable = "多卡 / 7B–70B 在线 RL，生成 GPU 与训练 GPU 物理隔离"
+memory_effect = "独立推理卡满载 KV cache，训练卡不再被 vLLM 占显存，减少生成/训练切换空闲"
+batch_rule = "注意 vllm_importance_sampling_cap 等异步/策略偏移保护；先单卡 smoke 验证 reward 再切多卡"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "1x24gb"
+hardware = "1× 24GB（RTX 4090 / L4 / A10G）"
+qlora_max_b = "14B（长序列/VLM 建议 ≤7B）"
+lora_bf16_max_b = "7B（紧凑 seq_length）"
+full_sft_max_b = "1B"
+grpo_max_b = "0.5B–1.7B（Wordle 阈值：VRAM ≥24GB 选 Qwen3-1.7B，否则 0.6B）"
+starter_micro = "1–4（配 grad_accum 8–32）"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "1x40_48gb"
+hardware = "1× 40GB–48GB（A100 40G / L40S / A6000）"
+qlora_max_b = "32B（48GB 曾跑通 QLoRA 65B 论文锚点，micro=1）"
+lora_bf16_max_b = "14B"
+full_sft_max_b = "1.7B–2B"
+grpo_max_b = "3B QLoRA / 1.7B 全参"
+starter_micro = "2–8"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "1x80gb"
+hardware = "1× 80GB（A100 80G / H100 80G）"
+qlora_max_b = "70B（论文/公式估算可达，大 micro 建议 32B 内）"
+lora_bf16_max_b = "24B–32B（偏紧）"
+full_sft_max_b = "3B（含 3B 全参 GRPO）"
+grpo_max_b = "3B 全参 / 7B–14B QLoRA"
+starter_micro = "4–16（8B QLoRA xlam 用 micro=16）"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "2x80gb"
+hardware = "2× 80GB（160GB 总显存）"
+qlora_max_b = "70B（含 DPO/MPO 70B QLoRA，双卡留激活余量）"
+lora_bf16_max_b = "32B"
+full_sft_max_b = "7B（ZeRO-2/3）"
+grpo_max_b = "7B–14B（1 卡 vLLM server + 1 卡训练，或 2 卡 ZeRO-2）"
+starter_micro = "每卡 2–8（减半 grad_accum 保有效 batch）"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "4x80gb"
+hardware = "4× 80GB（320GB 总显存）"
+qlora_max_b = "70B（大 batch / 长序列 / VLM 高分辨率）"
+lora_bf16_max_b = "70B（ZeRO-3）"
+full_sft_max_b = "14B（ZeRO-3）"
+grpo_max_b = "14B–32B（2 卡 vLLM + 2 卡训练或 ZeRO-3）"
+starter_micro = "每卡 2–8"
+estimate = true
+
+[[gpu_tier_starter]]
+id = "8x80gb"
+hardware = "8× 80GB（640GB 总显存）"
+qlora_max_b = "70B+（高吞吐大序列）"
+lora_bf16_max_b = "70B（含 VLM 高分辨率）"
+full_sft_max_b = "32B（ZeRO-3；70B 全参需 ~16–20×80GB 起）"
+grpo_max_b = "32B（分离 vLLM server 卡池 + 训练卡池）"
+starter_micro = "每卡 1–4（随 world_size=8 调整 accum）"
+estimate = true
+
+# ───────────────────────── 实测锚点（来自上游 recipe / 论文自带数字） ─────────────────────────
+[[anchor]]
+id = "wordle_s_per_rollout"
+recipe = "agent/grpo/wordle-openenv-hf-jobs"
+value = "2.31 s/rollout（40 rollouts / 92.4 s 校准）"
+derived = "150 步 × 64 rollouts/步 × 2.31 s ≈ 6.16 h，与上游 est_full_gpu_hours 6.2 吻合"
+measured = true
+
+[[anchor]]
+id = "vllm_colocate_its"
+recipe = "llm/grpo/qwen2-0-5b-vllm-colocate"
+value = "max_completion_length=512：0.04 → 0.07 it/s（+75%）；1024：0.02 → 0.04 it/s（+100%）"
+derived = "瓶颈是 rollout 生成而非梯度；上游只报 it/s，未报显存 / pass@1"
+measured = true
+
+[[anchor]]
+id = "chartqa_7b_hours"
+recipe = "vlm/sft/qwen2-vl-7b-chartqa"
+value = "est_gpu_hours = 6.0（1× A100 80GB，7B QLoRA）"
+derived = "上游预估值，不是本仓实测"
+measured = false
+
+[[anchor]]
+id = "qlora_65b_48gb"
+recipe = ""
+value = "QLoRA 论文：65B 在单张 48GB 上微调"
+derived = "用于校准 qlora_sft 规则"
+measured = true
+
+# ───────────────────────── vLLM colocate 单卡吞吐完整对照（Cookbook 原文，max_prompt_length=128） ─────────────────────────
+[[vllm_colocate_row]]
+max_completion_length = 64
+num_generations = "4 / 8 / 16"
+vllm_on_its = 0.14
+vllm_off_its = 0.12
+speedup = "+16.7%"
+in_recipe_toml = false
+
+[[vllm_colocate_row]]
+max_completion_length = 128
+num_generations = "8 / 16"
+vllm_on_its = 0.13
+vllm_off_its = 0.09
+speedup = "+44.4%"
+in_recipe_toml = false
+
+[[vllm_colocate_row]]
+max_completion_length = 256
+num_generations = "8 / 16"
+vllm_on_its = 0.10
+vllm_off_its = 0.06
+speedup = "+66.7%"
+in_recipe_toml = false
+
+[[vllm_colocate_row]]
+max_completion_length = 512
+num_generations = "8 / 16"
+vllm_on_its = 0.07
+vllm_off_its = 0.04
+speedup = "+75%"
+in_recipe_toml = true
+
+[[vllm_colocate_row]]
+max_completion_length = 1024
+num_generations = "16 / 32"
+vllm_on_its = 0.04
+vllm_off_its = 0.02
+speedup = "+100%"
+in_recipe_toml = true
+
+# ───────────────────────── Wordle HF Jobs 超时投影反推表（headroom=0.75，grad_accum=64，2.31 s/rollout） ─────────────────────────
+[[wordle_budget_row]]
+budget_seconds = 3600
+flavor_hint = "a10g-small（smoke 1h）"
+headroom = 0.75
+max_steps = 18
+fits_full_150 = false
+
+[[wordle_budget_row]]
+budget_seconds = 10800
+flavor_hint = "a10g-small（full 3h）"
+headroom = 0.75
+max_steps = 54
+fits_full_150 = false
+
+[[wordle_budget_row]]
+budget_seconds = 21600
+flavor_hint = "a100-large（vLLM 6h）"
+headroom = 0.75
+max_steps = 109
+fits_full_150 = false
+
+[[wordle_budget_row]]
+budget_seconds = 43200
+flavor_hint = "12h 作业窗口（可完整跑 150 步）"
+headroom = 0.75
+max_steps = 219
+fits_full_150 = true
+
+# ───────────────────────── 已核查论文对规模/显存/数据规划的约束（绑定 registry/methodology.toml） ─────────────────────────
+[[paper_anchor]]
+paper_id = "lima"
+arxiv_id = "2305.11206"
+topic = "最小高质量样本量"
+planning_role = "1,000 条精选指令在 65B 上完成标准 SFT 对齐，支撑 S1/S2 先质量后放大；不证明小模型客服/域任务只需 1k"
+
+[[paper_anchor]]
+paper_id = "dedup_training_data"
+arxiv_id = "2107.06499"
+topic = "去重与污染拦截"
+planning_role = "近重复造成记忆与 val >4% 重叠，去重后达同精度所需步数更少；S2→S3 放大前必过按图/题/repo hash 去重"
+
+[[paper_anchor]]
+paper_id = "underspecification"
+arxiv_id = "2011.03395"
+topic = "多 seed 预算乘法"
+planning_role = "同 held-out 精度可对应不同部署表现；S3 起算力必须按 ≥3 个独立训练 seed × 配置数规划"
+
+[[paper_anchor]]
+paper_id = "reward_overopt"
+arxiv_id = "2210.10760"
+topic = "RL 步数上限"
+planning_role = "代理 reward 过度优化会损害真实指标；RL 不宜盲目堆 steps，须监控独立 verifier 与 reward 背离"
+
+[[paper_anchor]]
+paper_id = "qlora"
+arxiv_id = "2305.14314"
+topic = "单卡显存锚点"
+planning_role = "NF4 + 双重量化 + paged optimizers 支持单张 48GB 微调 65B；同时提示定性聊天基准不可信"
+
+[[paper_anchor]]
+paper_id = "lora"
+arxiv_id = "2106.09685"
+topic = "参数与显存压缩"
+planning_role = "低秩冻结减少优化器状态；但 GPT-3 175B 的 3× 显存降幅不线性套用到 0.5B–8B，微批激活仍可能撑爆显存"
+
+[[paper_anchor]]
+paper_id = "dora"
+arxiv_id = "2402.09353"
+topic = "DoRA 稳定性"
+planning_role = "分解幅度与方向改善低秩学习；推理零额外延迟，但训练期相对 LoRA 多少量参数与前向开销"
+
+[[paper_anchor]]
+paper_id = "dpo"
+arxiv_id = "2305.18290"
+topic = "偏好训练双模型显存"
+planning_role = "省去 PPO critic 与在线采样，但训练前向需 policy + 冻结 ref，显存规则系数约为 QLoRA SFT 的 2×"
+
+[[paper_anchor]]
+paper_id = "rlaif_v"
+arxiv_id = "2405.17220"
+topic = "AI 反馈偏好规模"
+planning_role = "开源 MLLM 反馈可用于偏好构建；但跨基座（SmolVLM vs Qwen2.5-VL）不能把指标差归因到算法"
+
+[[paper_anchor]]
+paper_id = "deepseekmath_grpo"
+arxiv_id = "2402.03300"
+topic = "GRPO 无 critic 内存"
+planning_role = "去掉 PPO value/critic 省下显存；实际瓶劲转移到每步 num_generations 次在线自回归生成"
+
+[[paper_anchor]]
+paper_id = "vllm_pagedattention"
+arxiv_id = "2309.06180"
+topic = "KV 显存与 rollout 引擎"
+planning_role = "PagedAttention 提升长生成吞吐；colocate 下须从训练显存划拨 gpu_memory_utilization"
+
+[[paper_anchor]]
+paper_id = "qwen2vl"
+arxiv_id = "2409.12191"
+topic = "动态分辨率视觉 token"
+planning_role = "VLM 图像 token 数随分辨率变化，SFT/DPO 须设 max_length=None，大图会显著推高激活显存"
+
+[[paper_anchor]]
+paper_id = "qwen25vl"
+arxiv_id = "2502.13923"
+topic = "原生空间分辨率感知"
+planning_role = "同上：视觉推理 max_prompt_length 需给足 2048 防止截断视觉 token，显存估算不能只看文本长度"
+
+# ───────────────────────── 利用率区间（估算，非实测） ─────────────────────────
+[[utilization_band]]
+id = "sft_qlora_lora"
+scenario = "SFT / LoRA / QLoRA，micro-batch 填满显存"
+gpu_util_pct = "60–90"
+vram_util_pct = "70–95"
+bottleneck = "算力 / 数据加载"
+estimate = true
+
+[[utilization_band]]
+id = "dpo_mpo"
+scenario = "DPO / MPO（policy + ref 前向）"
+gpu_util_pct = "55–85"
+vram_util_pct = "65–90"
+bottleneck = "算力；长序列 / 图像 token 受显存限制"
+estimate = true
+
+[[utilization_band]]
+id = "grpo_hf_generate"
+scenario = "GRPO，HF generate 在线采样"
+gpu_util_pct = "30–60"
+vram_util_pct = "50–85"
+bottleneck = "rollout 生成（自回归解码）"
+estimate = true
+
+[[utilization_band]]
+id = "grpo_vllm_colocate"
+scenario = "GRPO，vLLM colocate"
+gpu_util_pct = "45–75"
+vram_util_pct = "70–90"
+bottleneck = "生成 / 训练切换；gpu_memory_utilization 需与训练争显存"
+estimate = true
+
+# ───────────────────────── 14 篇 recipe 规模与超参事实 ─────────────────────────
+# 以下字段必须与 recipe.toml 一致（tests/test_compute_planning.py 强校验）：
+#   micro_batch, grad_accum, steps_full, steps_kind, num_generations,
+#   dataset_name, peft_spec, precision_mode, quantization_mode, seq_or_length,
+#   grad_ckpt, optim, learning_rate, hardware_declared
+# 缺失字段不写（None），不凭记忆补。params_b_source = "recipe" 须与 model.params_b 相等；"estimate" 表示 recipe 未给，此处为估算。
+
+[[recipe]]
+id = "agent/grpo/wordle-openenv-hf-jobs"
+method = "grpo"
+params_b = 0.6
+params_b_source = "estimate"
+micro_batch = 1
+grad_accum = 64
+steps_full = 150
+steps_kind = "budget_cap"
+gpus = 1
+dataset_name = "OpenEnv Wordle（在线生成，无静态数据集）"
+dataset_scale_note = "在线生成：smoke 30 / full 3000 prompts；eval 固定 20 局"
+precision_mode = "unspecified"
+quantization_mode = "unspecified"
+peft_spec = "full / 未声明"
+seq_or_length = "多轮整局（上游约 1024）"
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "1× A100 80GB（上游 est_full_gpu_hours 6.2）"
+time_anchor = "6.2 h（上游预估；2.31 s/rollout 可复算）"
+
+[[recipe]]
+id = "llm/grpo/qwen2-0-5b-numinamath"
+method = "grpo"
+params_b = 0.5
+params_b_source = "recipe"
+micro_batch = 4
+grad_accum = 16
+steps_full = 150
+steps_kind = "budget_cap"
+num_generations = 4
+gpus = 1
+dataset_name = "AI-MO/NuminaMath-TIR"
+dataset_scale_note = "固定连续切分：500 train / 500 val / 500 test（共 1500）"
+precision_mode = "unspecified"
+quantization_mode = "unspecified"
+peft_spec = "full（无 PEFT）"
+seq_or_length = "comp=64"
+learning_rate = 1e-5
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（按模型规模与 batch 估）"
+time_anchor = ""
+
+[[recipe]]
+id = "llm/grpo/qwen2-0-5b-vllm-colocate"
+method = "grpo"
+params_b = 0.5
+params_b_source = "recipe"
+steps_full = 150
+steps_kind = "budget_cap"
+num_generations = 8
+gpus = 1
+dataset_name = "AI-MO/NuminaMath-TIR"
+dataset_scale_note = "与 NuminaMath 篇共享 held-out 索引（上游用 train 10%）"
+precision_mode = "unspecified"
+quantization_mode = "unspecified"
+peft_spec = "full / 未声明"
+seq_or_length = "prompt=512 / comp=512"
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（按模型规模与 batch 估）"
+time_anchor = "0.04–0.07 it/s（512 token，上游）"
+
+[[recipe]]
+id = "llm/grpo/qwen2-5-3b-advanced-reward"
+method = "grpo"
+params_b = 3.0
+params_b_source = "recipe"
+micro_batch = 4
+grad_accum = 8
+steps_full = 150
+steps_kind = "budget_cap"
+num_generations = 4
+gpus = 1
+dataset_name = "openai/gsm8k"
+dataset_scale_note = "官方 7473 train（90/10 hash 切）+ 1319 test 全量 held-out"
+precision_mode = "bf16"
+quantization_mode = "unspecified"
+peft_spec = "full（fp32 权重 + bf16 autocast）"
+seq_or_length = "prompt=512 / comp=256"
+grad_ckpt = false
+learning_rate = 5e-6
+release_configs = 5
+release_runs_with_zeroshot = 16
+hardware_declared = "1× A100 80GB（3B GRPO）"
+time_anchor = ""
+
+[[recipe]]
+id = "llm/sft/llama3-8b-xlam-function-calling"
+method = "qlora_sft"
+params_b = 8.0
+params_b_source = "recipe"
+micro_batch = 16
+grad_accum = 8
+steps_full = 150
+steps_kind = "max_steps"
+gpus = 1
+dataset_name = "Salesforce/xlam-function-calling-60k"
+dataset_scale_note = "60k（2024-07 重生成 1896 条）；80/10/10 切，test ≤300"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora r=16 / α=16"
+seq_or_length = "seq=2048"
+grad_ckpt = true
+optim = "adamw_8bit"
+learning_rate = 1e-4
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "1× H100 80GB（8B 4bit，上游快照 H100 NVL）"
+time_anchor = ""
+
+[[recipe]]
+id = "llm/sft/rapidfire-multiconfig"
+method = "lora_bf16"
+params_b = 0.124
+params_b_source = "recipe"
+micro_batch = 2
+grad_accum = 2
+steps_full = 64
+steps_kind = "max_steps"
+gpus = 1
+dataset_name = "bitext/Bitext-customer-support-llm-chatbot-training-dataset"
+dataset_scale_note = "数据卡 26872 行（上游仅取 64 行）；本仓 80/10/10，test ≤300"
+precision_mode = "fp16"
+quantization_mode = "unspecified"
+peft_spec = "lora r=8/32 / α=16/64（4 配置）"
+seq_or_length = "seq=512"
+grad_ckpt = true
+optim = "adamw_torch"
+learning_rate = 5e-4
+release_configs = 4
+release_runs_with_zeroshot = 13
+hardware_declared = "待实跑确认（gpt2 124M fp16 + LoRA，按 batch 与 max_steps 估）"
+time_anchor = ""
+
+[[recipe]]
+id = "llm/sft/starcoder1b-fim"
+method = "qlora_sft"
+params_b = 1.0
+params_b_source = "recipe"
+micro_batch = 16
+grad_accum = 1
+steps_full = 2000
+steps_kind = "max_steps"
+gpus = 1
+dataset_name = "smangrul/hf-stack-v1"
+dataset_scale_note = "数据卡 5905 行（本仓上限 6000，repo hash 80/10/10）"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora r=8 / α=32"
+seq_or_length = "seq=2048"
+grad_ckpt = true
+optim = "adamw_torch"
+learning_rate = 5e-4
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（按模型规模与 batch 估）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/dpo/smolvlm-rlaif-v"
+method = "dpo_qlora"
+params_b = 2.25
+params_b_source = "estimate"
+micro_batch = 1
+grad_accum = 32
+steps_full = 150
+steps_kind = "budget_cap"
+gpus = 1
+dataset_name = "HuggingFaceH4/rlaif-v_formatted"
+dataset_scale_note = "上游 train[:6%]/test[:1%]；本仓图像 hash 80/10/10"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora-dora r=8 / α=8"
+seq_or_length = "seq=512（mc max_length=none）"
+grad_ckpt = true
+learning_rate = 5e-6
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（按模型规模与 batch 估）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/grpo/qwen2-5-vl-3b-visual-reasoning"
+method = "grpo"
+params_b = 3.8
+params_b_source = "estimate"
+micro_batch = 2
+steps_full = 150
+steps_kind = "budget_cap"
+num_generations = 2
+gpus = 1
+dataset_name = "lmms-lab/multimodal-open-r1-8k-verified"
+dataset_scale_note = "8k 规模（上游取 5%）；本仓固定末 500 条 held-out"
+precision_mode = "unspecified"
+quantization_mode = "unspecified"
+peft_spec = "full / 未声明"
+seq_or_length = "prompt=2048 / comp=1024"
+learning_rate = 1e-5
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "1× A100 80GB（3B VLM GRPO）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/mpo/qwen2-5-vl-3b-mpo"
+method = "dpo_qlora"
+params_b = 3.8
+params_b_source = "estimate"
+micro_batch = 4
+grad_accum = 8
+steps_full = 200
+steps_kind = "budget_cap"
+gpus = 1
+dataset_name = "HuggingFaceH4/rlaif-v_formatted"
+dataset_scale_note = "上游 train[:5%]/test[:1%]；与 DPO 共享图像 hash 80/10/10"
+precision_mode = "bf16_false_mismatch"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora-dora r=8 / α=8"
+seq_or_length = "seq=1024（mc max_length=none）"
+grad_ckpt = true
+learning_rate = 5e-6
+release_configs = 3
+release_runs_with_zeroshot = 10
+hardware_declared = "1× A100 80GB（3B VLM）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/sft/granite-vision-line-comparison"
+method = "qlora_sft"
+params_b = 2.0
+params_b_source = "recipe"
+micro_batch = 4
+grad_accum = 2
+steps_full = 150
+steps_kind = "max_steps"
+gpus = 1
+dataset_name = "euclid-multimodal/Geoperception"
+dataset_scale_note = "LineComparison 子集；本仓图像 hash 80/10/10"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double_skip_vision"
+peft_spec = "qlora-dora r=8 / α=8"
+seq_or_length = "seq=512（mc max_length=none）"
+grad_ckpt = true
+optim = "adamw_torch_fused"
+learning_rate = 1e-4
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（上游仅称 tested using a A100 GPU，未给显存数值）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/sft/paligemma2-refcoco-grounding"
+method = "lora_bf16"
+params_b = 3.0
+params_b_source = "recipe"
+micro_batch = 2
+grad_accum = 4
+steps_full = 150
+steps_kind = "max_steps"
+gpus = 1
+dataset_name = "jxu124/refcoco"
+dataset_scale_note = "上游 train[:5%]（Flickr URL）；本仓图像 hash 80/10/10"
+precision_mode = "bf16"
+quantization_mode = "none"
+peft_spec = "lora r=8 / α=16"
+seq_or_length = "seq=512（mc max_length=none）"
+grad_ckpt = false
+optim = "adamw_torch_fused"
+learning_rate = 1e-5
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（上游称 Colab A100，未给显存数值）"
+time_anchor = ""
+
+[[recipe]]
+id = "vlm/sft/qwen2-vl-7b-chartqa"
+method = "qlora_sft"
+params_b = 7.0
+params_b_source = "recipe"
+micro_batch = 4
+grad_accum = 8
+steps_full = 150
+steps_kind = "budget_cap"
+gpus = 1
+dataset_name = "HuggingFaceM4/ChartQA"
+dataset_scale_note = "上游 train[:10%]/val[:10%]/test[:10%]（原理阻塞：零训练达标）"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora r=8 / α=16"
+seq_or_length = "mc max_length=none"
+grad_ckpt = false
+learning_rate = 2e-4
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "1× A100 80GB（7B QLoRA，上游 est_gpu_hours 6.0）"
+time_anchor = "6.0 h（上游预估，非实测）"
+
+[[recipe]]
+id = "vlm/sft/smolvlm-chartqa"
+method = "qlora_sft"
+params_b = 2.0
+params_b_source = "recipe"
+micro_batch = 4
+grad_accum = 4
+steps_full = 200
+steps_kind = "budget_cap"
+gpus = 1
+dataset_name = "HuggingFaceM4/ChartQA"
+dataset_scale_note = "ChartQA（原理阻塞：基座预训练已接触同集）"
+precision_mode = "bf16"
+quantization_mode = "nf4_4bit_double"
+peft_spec = "qlora-dora r=8 / α=8"
+seq_or_length = "mc max_length=none"
+learning_rate = 1e-4
+release_configs = 1
+release_runs_with_zeroshot = 4
+hardware_declared = "待实跑确认（按模型规模与 batch 估）"
+time_anchor = ""

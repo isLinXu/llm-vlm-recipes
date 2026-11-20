@@ -445,6 +445,13 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 - 决策二（诚实分段）：capabilities 仅 data/train/eval 记 `implemented`；comparison（drop-one × 3 seed）与 export 仍 `missing`；feasibility 改为 `partial_implementation`（恰三维实装）；recipe 不声明 `execution.task_id`，task_router 不注册，`runner/suite.py` 报 `release_pipeline: unavailable`。
 - 边界：四 reward 等权相加未经消融也未归一化；仅 macOS ARM 离线合成/fake-runtime 证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变，`--min-*` 目标仍失败关闭。ADR-029 已补齐发布级两维并改判 pending_freeze。
 
+## ADR-030 — 垂直后训练数据规模与算力规划台账（独立静态规划契约，不改 5+2 生成物清单）
+
+- 背景：训练规划散落在 14 篇 `recipe.toml`（batch/步数/精度/量化/PEFT/序列长/多配消融）、`docs/llm-vlm-training-cookbook-research.html`（Wordle 超时投影与 vLLM 5 档实测锚点）与经验口算中，缺乏统一的可机读、可校验台账；同时 `tests/test_agent_contract.py` 锁定 `registry/agent_contract.toml` 的 `sources_of_truth`（10 项）与 `generated_artifacts`（5 份）数量边界。
+- 决策一（事实与估算显式分离）：新建 `registry/compute_planning.toml` 承载 S0–S4 数据阶梯、P0–P3 阶段门、发布级算力乘法（标准 4 / MPO 10 / RapidFire 13 / GSM8K 16）、14 篇全量超参镜像（精确对齐 `recipe.toml`）、vLLM colocate 5 档实测锚点、Wordle 超时投影（`headroom=0.75`）、13 篇已核实论文规模绑定（对齐 `methodology.toml`），以及带 `estimate = true` 标记的显存/GPU 起跑规格/多卡并行策略表。
+- 决策二（手写文档 + 强单测同步）：保持 `registry/agent_contract.toml` 的 5+2 生成物清单不变；以手写文档 `docs/COMPUTE-PLANNING.md` 渲染 10 张对照表，并用 `tests/test_compute_planning.py` 逐篇、逐档强制校验 TOML、14 篇 `recipe.toml`、`methodology.toml` 与 Markdown 表格三方一致。
+- 边界：所有显存档位、卡数起跑规格与多卡策略均标记 `estimate = true`，实测锚点仅 4 项（均来自上游/调研原文）；估算或静态规划表格不构成 GPU 执行证据，不改变 `GPU verified 0 / B2+ 0 / L2+ 0 / eligible 0/14`。
+
 ---
 
 ## recipe.toml 字段规范
