@@ -1,10 +1,10 @@
 # recipe-lab
 
-面向 LLM / VLM 的研究与业务训练基线仓库。当前交付是**更严格的维护框架 + 八篇五维参考适配**，不是「14 篇已完成 baseline」。
+面向 LLM / VLM 的研究与业务训练基线仓库。当前交付是**更严格的维护框架 + 九篇五维参考适配**，不是「14 篇已完成 baseline」。
 
 [输入调研](docs/llm-vlm-training-cookbook-research.html) · [来源与修正](docs/SOURCE-MAP.md) · [设计决策](docs/DESIGN.md) · [验证规则](docs/VERIFICATION.md) · [Agent 交接](AGENTS.md)
 
-> 最近一次本地验证（2026-11-17）：`make ci` 0 error / 1160 passed；五份核心审计生成物与两份交接视图哈希稳定。
+> 最近一次本地验证（2026-11-20）：`make ci` 0 error / 1469 passed；五份核心审计生成物与两份交接视图哈希稳定。
 > 静态检查只证明仓库内部一致性，**不认证 GPU 执行**。
 
 ## 阅读路径
@@ -17,20 +17,21 @@
 | 看每篇五维缺什么、波次怎么排 | [BASELINE-READINESS.md](docs/BASELINE-READINESS.md) |
 | 看为什么这么设计、依据哪篇论文 | [METHODOLOGY.md](docs/METHODOLOGY.md) |
 | 看后训练方向覆盖与缺口 | [MLLM-POST-TRAINING.md](docs/MLLM-POST-TRAINING.md) |
+| 规划数据规模阶梯、卡数、显存与训练时间（估算，非实测） | [COMPUTE-PLANNING.md](docs/COMPUTE-PLANNING.md) |
 
 ## 当前状态
 
 | 维度 | 当前事实 | 判定 |
 | --- | --- | --- |
 | 配方登记 | 14 篇，逐篇一手材料核查 | 登记不等于逐字节复现上游 |
-| 五维代码 | 8 篇具备 `data/train/eval/comparison/export`；70 格中 40 implemented / 30 missing | `implemented` ≠ `verified` |
+| 五维代码 | 9 篇具备 `data/train/eval/comparison/export`；70 格中 45 implemented / 25 missing | `implemented` ≠ `verified` |
 | CUDA GPU 实跑 | 0 篇；未下载真实模型/数据，未确认框架兼容、显存或训练效果 | 不能宣称任何篇为已验证 baseline |
-| 就绪度 | B2+ 0、B3 0；eligible 0/14 | 8 pending_freeze、4 not_implemented、2 原理性阻塞 |
+| 就绪度 | B2+ 0、B3 0；eligible 0/14 | 9 pending_freeze、3 not_implemented、2 原理性阻塞 |
 | 上游可复现性 | L0 8 / L1 6 / L2+ 0 | 没有一篇确认完全锁定 |
 | 方法论依据 | 14 篇逐篇绑定；20/23 篇论文一手核实，10 条编号更正 | 论文不背书 GPU 晋级 |
 | MLLM 后训练方向 | 五方向映射 14 篇；5/5 有五维实现支撑 | 方向覆盖不等于 DPO / MPO 已有 GPU baseline |
 | Agent 交接契约 | `AGENTS.md` + `AGENT-HANDOFF.md/json`；契约登记的命令可复现 | 不新增认证能力，不解锁 B2/B3 |
-| CI | `make ci` 0 error / 1160 passed（最近一次） | 只证明内部一致性与离线测试通过 |
+| CI | `make ci` 0 error / 1469 passed（最近一次） | 只证明内部一致性与离线测试通过 |
 
 > **两条铁律**：B1 只是命令、入口、锁模板、种子与划分意图的声明；`implemented` 只表示任务代码和离线测试已交付。
 > `verified` 必须另有冻结环境下的真实运行证据；静态 JSON、hash、测试和 dry-run 都不能替代它。
@@ -129,11 +130,12 @@ PYTHONPATH=src python3 -m recipe_lab handoff --report  # 生成两份交接视�
 `status` 的 cataloged → ported → smoke-passed → benchmarked 只记录配方维护进展，不替代上述审计。
 复现上游实验与自建 baseline 可以不同，但后者必须公开声明差异并冻结、实测。
 
-## 八篇已实装参考适配
+## 九篇已实装参考适配
 
-八篇均按 `task_router` 精确分派 `task` / `suite` / `export`，未知或冲突任务失败关闭，互不借用协议。
+九篇均按 `task_router` 精确分派 `task` / `suite` / `export`，未知或冲突任务失败关闭，互不借用协议。
 它们都只有离线合成证据；无 CUDA 实测、无冻结 revision；真实配方未预声明 `export_tolerance` 时 `--full` 导出失败关闭。
 DPO 与 MPO 共享偏好 split 算法，但基座不同，`cross_backbone_attribution_valid=false`。
+GSM8K 的 5 drop-one reward 消融只在同一 Qwen2.5-3B backbone 内。
 
 | 任务 | recipe_id / task_id | 自建协议一句话 | 发布级对照 |
 | --- | --- | --- | --- |
@@ -145,6 +147,7 @@ DPO 与 MPO 共享偏好 split 算法，但基座不同，`cross_backbone_attrib
 | PaliGemma2 | `vlm/sft/paligemma2-refcoco-grounding` / `paligemma-grounding-v1` | COCO `xywh`→`xyxy` + 1024 桶 `<loc####>` round-trip | 3 seed 四指标 + 普通 LoRA adapter-only |
 | SmolVLM DPO | `vlm/dpo/smolvlm-rlaif-v` / `smolvlm-dpo-v1` | 图像 hash 隔离 + 显式 beta sigmoid + 冻结 ref | 3 seed 隐式奖励 pairwise + adapter-only（不打包 ref） |
 | Qwen2.5-VL MPO | `vlm/mpo/qwen2-5-vl-3b-mpo` / `qwen25vl-mpo-v1` | 共享偏好 split + sigmoid/bco_pair/sft 三损失消融 | 3 消融 × 3 seed；不得与 DPO 篇跨 backbone 归因 |
+| GSM8K 四 reward | `llm/grpo/qwen2-5-3b-advanced-reward` / `gsm8k-reward-v1` | `####` gold Decimal 剥离 + 四 reward 等权 + 独立 verifier | 5 drop-one × seed + 整模型 offline 复载 |
 
 <details>
 <summary>数学 GRPO：固定划分、格式奖励、三 seed 套件</summary>
@@ -280,19 +283,21 @@ make mpo-export-dry-run
 </details>
 
 <details>
-<summary>GSM8K 四 reward GRPO（partial：仅 data/train/eval 三维）</summary>
+<summary>GSM8K 四 reward GRPO：5 drop-one 消融 × seed</summary>
 
 - `llm/grpo/qwen2-5-3b-advanced-reward` / 自建 `gsm8k-reward-v1`（非上游复现，档位/标签/超参为本仓选择）。
 - `####` gold 剥离并 Decimal 规范化；官方 train 90/10 hash 切分，官方 test 1319 题整体 held-out；独立严格校验器，输出 `reward_hacking_rate`。
-- comparison（drop-one 消融）与 export 缺失；未注册 task_router，发布级套件 unavailable。
+- 5 消融（full / no_format_exact / no_format_approx / no_correctness / no_extraction）× 独立训练 seed；整模型 safetensors 离线复载；task_router 精确注册。
 
 ```bash
 make gsm8k-dry-run
+make gsm8k-suite-dry-run
+make gsm8k-export-dry-run
 ```
 
 </details>
 
-其余 6 篇为 1 篇 `partial_implementation`（GSM8K 三维）+ 3 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
+其余 5 篇为 3 篇 `not_implemented` + 2 篇原理性阻塞；不可用统一入口文件的存在冒充实现。
 
 ## 完整方法覆盖与实施队列
 
@@ -327,7 +332,7 @@ make gsm8k-dry-run
 
 ```text
 registry/                     taxonomy、reproducibility、baseline、capabilities、feasibility、
-                              methodology、mllm_post_training、agent_contract、一手 evidence
+                              methodology、mllm_post_training、compute_planning、agent_contract、一手 evidence
 recipes/**/recipe.toml        14 篇配方；来源与自建差异显式登记
 src/recipe_lab/               审计器与 CLI：plan、math_task、capabilities、feasibility、
                               methodology、post_training、agent_contract、task_router
@@ -344,6 +349,7 @@ docs/AGENT-HANDOFF.json       Agent 交接契约机器可读清单（生成）
 docs/REPRODUCIBILITY.md       历史上游可复现性审计（生成）
 docs/MATRIX.md                全量配方索引（生成）
 docs/DESIGN.md                架构决策与证据检查边界
+docs/COMPUTE-PLANNING.md      数据规模阶梯与算力规划表（手写；事实源 registry/compute_planning.toml；估算非实测）
 docs/VERIFICATION.md          规则编号与维护 / 发布门禁区分
 AGENTS.md                     Agent 可发现入口与硬边界（静态）
 ```

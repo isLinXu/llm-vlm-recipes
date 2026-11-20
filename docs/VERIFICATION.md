@@ -48,7 +48,7 @@ L4 刻意**不跑真实训练**：本仓库是配方登记与契约层，GPU 执
 | --- | --- | --- |
 | 问的问题 | 声称跑过，证据文件在不在？ | 声称能重放，模型/数据/环境/种子真的锁了吗？ |
 | 依据 | `execution.entrypoint` / `evidence` 路径 | 一手材料核查（`registry/evidence.toml`） |
-| 当前结论 | 14篇均有统一入口；数学/FIM/xLAM/RapidFire/Granite/PaliGemma 六篇五维代码已实现，其余8篇实跑拒绝；实跑证据0篇 | **14 篇中 0 篇达到 L2「可复现」** |
+| 当前结论 | 14篇均有统一入口；数学/FIM/xLAM/RapidFire/Granite/PaliGemma/DPO/MPO/GSM8K 九篇五维代码已实现，其余5篇实跑拒绝（3篇未实现+2篇原理阻塞）；实跑证据0篇 | **14 篇中 0 篇达到 L2「可复现」** |
 | 失败含义 | 文件缺失 | 等级虚报、维度状态非法、证据引用查无出处 |
 
 L0–L5 全绿只证明**配置自洽 + 审计诚实**，不证明**结果可复现**。
@@ -92,11 +92,11 @@ L6 问的是**另一个问题**：「这篇 recipe 能不能当别人做研究 /
 
 **实验目标是否成立另有一层判定**：代码实装与 GPU 证据都不能替代它。
 `registry/feasibility.toml` / `recipe-lab feasibility` 逐篇给出 `eligible 0/14`、
-`pending_freeze 6`、`not_implemented 6`、`blocked_zero_train 1`、
+`pending_freeze 9`、`not_implemented 3`、`blocked_zero_train 1`、
 `contaminated_pretraining 1`、`partial_implementation 0`；`baseline --min-state B2/B3` 会把非 eligible 篇目列为失败。
 `partial_implementation` 枚举与交叉校验仍保留（恰三维 implemented + 发布级两维 missing），
-但 ADR-022 / ADR-023 补齐 Granite / PaliGemma 五维并精确注册 `task_router` 后，真实登记已无篇目使用该 verdict，
-两篇改判 `pending_freeze`——这只代表五维代码齐备，不是 baseline 晋级。
+但 ADR-022 / ADR-023 / ADR-027 / ADR-029 陆续补齐五维并精确注册 `task_router` 后，真实登记已无篇目使用该 verdict，
+这些篇目改判 `pending_freeze`——这只代表五维代码齐备，不是 baseline 晋级。
 `qwen2-vl-7b-chartqa` 上游自承零训练基线即可达标（`decision.gate=blocked`），
 `smolvlm-chartqa` 基座本就在 ChartQA 上训练过，这两类**补齐代码和 CUDA 实跑也不能晋级**，
 须改写实验目标 / 换未污染数据后重核一手材料。Granite Vision 篇的一手核查见
@@ -130,7 +130,7 @@ arXiv 2503.06072 只能作 `cross_check`，`Awesome-MLLM-Tuning` 只能作 `meth
 `post-training --check` 校验五方向闭合、14 篇精确映射、primary/secondary 不重叠、
 实现状态从 `capabilities.toml` 重算，且 `blocked_zero_train` / `contaminated_pretraining`
 篇标为无效覆盖证据；`--min-fivedim-directions N` 才是提升目标。
-当前 4/5 方向有五维实现支撑，偏好校准为缺口；这不表示 DPO/RLAIF-V 已有 baseline。
+ADR-027 补齐 DPO/MPO 后当前 5/5 方向已有五维实现支撑，缺口 0 个；这不表示 DPO/MPO/RLAIF-V 已有 GPU baseline（两篇非 shared backbone，禁止跨基座归因算法）。
 见 [MLLM-POST-TRAINING.md](MLLM-POST-TRAINING.md)（生成）与
 `tests/test_post_training.py`（27 项）。
 
@@ -146,7 +146,7 @@ Agent 看 `docs/AGENT-HANDOFF.json`。`handoff --check` 用真实 CLI 重建五�
 `G1 可引用` / `G2 可重放` / `G3 可对照` / `G4 可交付` 四组各带 `min_state`，
 `R603` 用同一个 `compute_state()` 重算并与 `baseline_contract.state` 比对，
 虚报即 error。B1 只代表「命令与参数确定、可以 dry-run」，**不代表跑通过一次**：
-数学math-grpo-v1、FIM code-fim-v1、xLAM xlam-fc-v1、RapidFire rapidfire-sft-v1、Granite granite-linecomparison-v1与PaliGemma paligemma-grounding-v1六篇五维均已有代码与隔离离线测试（Granite 为58+44项、PaliGemma 为46+44项），GPU与真实completed证据0篇；其余8篇任务尚未实现。六篇发布级校验各由`task_router.py`精确分派到本任务`suite`/`export`模块：数学1500题gold/manifest、FIM PSM输入/gold、xLAM严格JSON prompt/tools/gold、RapidFire 4配置×3 seed 的 raw instruction/response 重建 prompt/gold 与无stemmer ROUGE-L/exact_match 逐题重算、Granite 图像内容hash隔离的三seed逐题 question/answer 重建gold与exact_match重算、PaliGemma 图像内容hash隔离的三seed逐题从 raw COCO bbox + caption 重建gold detection/xyxy 与 bbox_iou/iou_at_0_5/parse_rate/exact_match 重算，互不借用。RapidFire 只用validation选配置、test单次验收，导出选中adapter并在HF offline新进程test复评；Granite 导出DoRA/4bit adapter-only包并在HF offline新进程held-out复评。内容身份按任务分派：RapidFire `_identity_recipe()`剥离实跑后回填的阈值与证据指针，Granite `identity_recipe()`只剥离阈值（`execution.evidence`是预声明位置路径，剥离会破坏训练时内容身份）；`acceptance`判定不被JSON自证，真实recipe未预声明`export_tolerance`时`--full`失败关闭。未知或冲突任务失败关闭，C306/C307/C405不靠提交普通JSON放行，合成JSON也不能替代真实运行。
+数学 `math-grpo-v1`、FIM `code-fim-v1`、xLAM `xlam-fc-v1`、RapidFire `rapidfire-sft-v1`、Granite `granite-linecomparison-v1`、PaliGemma `paligemma-grounding-v1`、SmolVLM DPO `smolvlm-dpo-v1`、Qwen2.5-VL MPO `qwen25vl-mpo-v1` 与 GSM8K `gsm8k-reward-v1` 九篇五维均已有代码与隔离离线测试，GPU与真实completed证据0篇；其余5篇任务尚未实现或原理性阻塞。九篇发布级校验各由 `task_router.py` 精确分派到本任务 `suite`/`export` 模块：数学1500题gold/manifest、FIM PSM输入/gold、xLAM严格JSON prompt/tools/gold、RapidFire 4配置×3 seed 的 raw instruction/response 重建与无stemmer ROUGE-L/exact_match 逐题重算、Granite 图像内容hash隔离的三seed逐题重算、PaliGemma 图像内容hash隔离的三seed从 raw COCO bbox + caption 重建并重算 bbox_iou/iou_at_0_5/parse_rate/exact_match、DPO 共享偏好 split 三seed隐式奖励 pairwise、MPO 同 backbone 3消融×3seed 三损失隐式奖励、GSM8K 5 drop-one×seed 独立严格 Decimal verifier 重算与整模型 safetensors 离线复载，互不借用。RapidFire 只用validation选配置、test单次验收；DPO与MPO不得跨backbone归因；GSM8K 消融只在同一Qwen2.5-3B backbone内。内容身份按任务分派：RapidFire `_identity_recipe()` 剥离实跑后回填的阈值与证据指针，Granite `identity_recipe()` 只剥离阈值；`acceptance` 判定不被JSON自证，真实recipe未预声明 `export_tolerance` 时 `--full` 失败关闭。未知或冲突任务失败关闭，C306/C307/C405不靠提交普通JSON放行，合成JSON也不能替代真实运行。
 实跑缺冻结输入/环境、任务路由或API不兼容时明确拒绝，绝不产占位分数。
 C306重读真实base内容，C307与生产聚合器共用代码/锁/有效seed配置/严格1500条manifest/预测/统计校验；不能直接提交宽松套件JSON绕过。
 C405重读`export.json`及完整导出包，核新进程身份、权重/文件/锁、协议与复载容差；`export_verified=true`不能单独放行，回滚仍需单独`rollback_verified/rollback_evidence`人工复核。
@@ -313,7 +313,7 @@ recipe-lab validate vlm/sft/smolvlm-chartqa --strict
 - **L6检查证据内部一致性，不认证GPU执行真实性**：要求真实结构化环境锁、关联训练/评估JSON、
   代码与split快照、文件hash、预算/身份/参数及数学逐题指标重算；仍不能仅靠手填JSON证明真实执行。
   B1仅代表声明，data/train/eval的实际代码与GPU验证另由capabilities登记。
-  其余8篇拒绝实跑；数学/FIM/xLAM/RapidFire/Granite/PaliGemma六篇五维代码与隔离离线测试齐备，Granite/PaliGemma发布级已按精确recipe_id注册并分派到自身协议；六篇都须先冻结输入与真实CUDA环境（PaliGemma 还须把 Flickr URL 图像冻结为静态副本），任何任务不能借用别的任务发布证据校验器晋级；发布级内容校验按任务分派，未知或冲突任务失败关闭，合成JSON不能替代真实运行；真实recipe未预声明`export_tolerance`时导出`--full`失败关闭，不回填容差。
+  其余5篇拒绝实跑；数学/FIM/xLAM/RapidFire/Granite/PaliGemma/DPO/MPO/GSM8K九篇五维代码与隔离离线测试齐备并已按精确recipe_id注册task_router；九篇都须先冻结输入与真实CUDA环境（PaliGemma 还须把 Flickr URL 图像冻结为静态副本），任何任务不能借用别的任务发布证据校验器晋级；发布级内容校验按任务分派，未知或冲突任务失败关闭，合成JSON不能替代真实运行；真实recipe未预声明`export_tolerance`时导出`--full`失败关闭，不回填容差。
 - 因此 **L0–L6 全绿 ≠ recipe 可复现，也 ≠ 可以作为 research baseline**。
   当前两个结论分别由 `docs/REPRODUCIBILITY.md`（0/14）与
   `docs/BASELINE-READINESS.md`（B2+ 0/14）承载。
