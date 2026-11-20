@@ -7,12 +7,13 @@
 
 刻意与数学路由分开：gold 来自 `####` 之后的规范化数值，推理文本绝不进 prompt；评估用
 独立的严格数值 verifier（不依赖 math_verify，也不复用 reward 的 0.5 近似档），并给出
-reward hacking 诊断。只实装 data/train/eval 三维；comparison / export 未实装，因此本任务
-不注册 task_router、不声明 execution.task_id（resolve() 对「声明了 task_id 却无管线」
-会直接拒绝），发布级套件 / 导出显式 unavailable，--full 的 baseline 门禁失败关闭。
+reward hacking 诊断。wave5b 起补齐 comparison（gsm8k_suite：五个 drop-one reward 消融
+× 独立训练 seed）与 export（gsm8k_export：整模型 safetensors 离线复载），按精确 recipe_id 注册
+task_router。reward 消融只在同一 Qwen2.5-3B backbone 内进行；四函数等权相加未经归一化。
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib
 import math
@@ -27,6 +28,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from . import math_task as mt
+from .model import Recipe
 from .math_task import DatasetValidationError, TaskExecutionError, sha256_json
 
 TASK_ID = "gsm8k-reward-v1"
@@ -56,6 +58,16 @@ REWARD_NAMES = (
 REWARD_MAX = {"match_format_exactly": 3.0, "match_format_approximately": 2.0,
               "check_answer_correctness": 3.0, "check_numbers_extraction": 1.5}
 CORRECTNESS_TIERS = (3.0, 1.5, 0.5, -0.5)
+# drop-one 消融：每个配置恰去掉一个 reward 函数，其余三个保持 TRL 默认等权求和；
+# full 是四函数基线。config_id 进入 fingerprint / 目录 / 证据，不允许借用。
+DEFAULT_CONFIG_ID = "full"
+ABLATION_CONFIGS = {
+    "full": REWARD_NAMES,
+    "no_format_exact": tuple(n for n in REWARD_NAMES if n != "match_format_exactly"),
+    "no_format_approx": tuple(n for n in REWARD_NAMES if n != "match_format_approximately"),
+    "no_correctness": tuple(n for n in REWARD_NAMES if n != "check_answer_correctness"),
+    "no_extraction": tuple(n for n in REWARD_NAMES if n != "check_numbers_extraction"),
+}
 METRICS = ("pass@1", "format_compliance", "reward_hacking_rate")
 TRAIN_REQUIRED = (
     "learning_rate", "lr_scheduler_type", "warmup_ratio", "weight_decay", "max_grad_norm",
@@ -215,8 +227,14 @@ REWARD_FUNCTIONS = {f.__name__: f for f in (
     check_answer_correctness, check_numbers_extraction)}
 
 
-def reward_functions() -> list:
-    return [REWARD_FUNCTIONS[name] for name in REWARD_NAMES]
+def reward_functions(active=None) -> list:
+    """按 active 名单返回 reward 函数；None 即四函数全集。名单只能是 REWARD_NAMES 的非空子序列。"""
+    names = REWARD_NAMES if active is None else tuple(active)
+    if not names or any(n not in REWARD_FUNCTIONS for n in names) or len(set(names)) != len(names):
+        raise TaskExecutionError(f"active reward 名单非法：{names!r}")
+    if list(names) != [n for n in REWARD_NAMES if n in names]:
+        raise TaskExecutionError("active reward 必须保持 REWARD_NAMES 顺序")
+    return [REWARD_FUNCTIONS[name] for name in names]
 
 
 # --------------------------------------------------------------------------- #
@@ -449,6 +467,7 @@ def require_supported(r, plan=None, task_id=None) -> str:
     for key in ("split_rule", "accuracy_definition", "reward_hacking_definition"):
         if not isinstance(section.get(key), str) or not section[key].strip():
             raise TaskExecutionError(f"[gsm8k].{key} 必须为非空说明")
+    verify_ablation(config_id_of(r))
     train = r.get("train", {}) or {}
     unknown = sorted(set(train) - TRAIN_KEYS)
     if unknown:
@@ -475,6 +494,44 @@ def require_supported(r, plan=None, task_id=None) -> str:
     return resolved
 
 
+def config_id_of(r) -> str:
+    return r.get("execution.config_id", DEFAULT_CONFIG_ID)
+
+
+def verify_ablation(config_id, active=None) -> dict:
+    """drop-one 消融必须显式绑定 config_id；active 名单与登记不符即拒绝。"""
+    if not isinstance(config_id, str) or config_id not in ABLATION_CONFIGS:
+        raise TaskExecutionError(f"未知 GSM8K reward 消融 config_id={config_id!r}")
+    expected = ABLATION_CONFIGS[config_id]
+    if active is not None and tuple(active) != expected:
+        raise TaskExecutionError(
+            f"config_id={config_id} 要求 active rewards={list(expected)}，实际 {active!r}")
+    disabled = [n for n in REWARD_NAMES if n not in expected]
+    return {"config_id": config_id, "active_rewards": list(expected),
+            "disabled_reward": disabled[0] if disabled else None}
+
+
+def active_rewards(r) -> list:
+    return list(verify_ablation(config_id_of(r))["active_rewards"])
+
+
+def config_recipe(r, config_id):
+    """派生单个 drop-one 消融配置：只写 execution.config_id（与 experiment_id 后缀）。
+
+    reward 名单由 config_id 唯一决定，不进 [train]，因此各配置超参逐字相同——
+    唯一变量是被去掉的 reward 函数。幂等，可重复调用。
+    """
+    if r.id != RECIPE_ID or not isinstance(config_id, str) or config_id not in ABLATION_CONFIGS:
+        raise TaskExecutionError("config_recipe 只接受 GSM8K recipe 与显式消融 config_id")
+    data = copy.deepcopy(r.data)
+    data.setdefault("execution", {})["config_id"] = config_id
+    base = (data.get("baseline_contract") or {}).get("experiment_id")
+    if isinstance(base, str) and base:
+        stem = base.split("--", 1)[0]
+        data.setdefault("baseline_contract", {})["experiment_id"] = f"{stem}--{config_id}"
+    return Recipe(r.id, r.path, data)
+
+
 def mode_output_dir(plan, mode: str) -> Path:
     return mt.mode_output_dir(plan, mode)
 
@@ -498,8 +555,10 @@ def task_plan(r, plan: dict, mode: str, task_id=None) -> dict:
         result["run"]["steps"] = steps
         result["run"]["params"] = {**plan["run"]["params"], "max_steps": steps}
     result["warnings"] = [w for w in plan.get("warnings", []) if "evaluation.expected" not in w]
+    result["ablation"] = {**verify_ablation(config_id_of(r)), "configs": {k: list(v) for k, v in ABLATION_CONFIGS.items()},
+                          "within_backbone": True, "single_variable": "被去掉的 reward 函数"}
     result["prompt"] = {"system": SYSTEM_PROMPT, "gold_in_prompt": False}
-    result["rewards"] = {**(plan.get("rewards") or {}), "functions": list(REWARD_NAMES),
+    result["rewards"] = {**(plan.get("rewards") or {}), "functions": active_rewards(r),
                          "max_scores": dict(REWARD_MAX),
                          "correctness_tiers": list(CORRECTNESS_TIERS)}
     result["evaluation"] = {
@@ -507,7 +566,7 @@ def task_plan(r, plan: dict, mode: str, task_id=None) -> dict:
         "runs": 1, "do_sample": False, "protocol": EVAL_PROTOCOL,
         "verifier": "strict-decimal（独立于 reward 的 0.5 近似档，不依赖 math_verify）",
         "training_seed_variance_measured": False, "baseline_promotion": "none",
-        "release_pipeline": "unavailable（comparison/export 未实装，不注册 task_router）",
+        "release_pipeline": "available（gsm8k_suite / gsm8k_export，task_router 精确注册；仍无 GPU 证据）",
     }
     return result
 
@@ -607,6 +666,7 @@ def completed_evidence(r, plan, kind, config, manifest, runtime) -> dict:
         **identity, "fingerprint": fingerprint(r), "schema_version": 1, "kind": kind,
         "stage": "completed", "task_id": TASK_ID, "recipe_id": r.id,
         "experiment_id": plan.get("experiment_id", ""), "mode": plan["mode"],
+        **verify_ablation(config_id_of(r)),
         "completed_at": datetime.now(timezone.utc).isoformat(), "seed": seed, "data_seed": data_seed,
         "model_id": MODEL_ID, "model_revision": mt.require_revision(r, "model.revision"),
         "dataset_id": DATASET_ID, "dataset_revision": mt.require_revision(r, "dataset.revision"),
@@ -638,6 +698,8 @@ def checkpoint_path(plan, checkpoint=None, *, recipe=None, require_evidence=True
             raise TaskExecutionError("checkpoint 内容与训练证据不一致")
         if recipe is not None:
             from .baseline_evidence import fingerprint
+            if evidence.get("config_id") != config_id_of(recipe):
+                raise TaskExecutionError("checkpoint 的 reward 消融 config_id 与当前 recipe 不一致")
             if (evidence.get("fingerprint") != fingerprint(recipe)
                     or evidence.get("model_revision") != recipe.get("model.revision")
                     or evidence.get("dataset_revision") != recipe.get("dataset.revision")):
@@ -671,7 +733,7 @@ def run_training(r, plan: dict) -> Path:
         raise TaskExecutionError(f"trl=={TRL_VERSION} 的 GRPOConfig / GRPOTrainer 不可用，请按 lock 重装依赖") from exc
     mt.check_signature(config_cls, kwargs, "GRPOConfig")
     trainer_kwargs = {"model": None, "processing_class": None, "args": None, "train_dataset": None,
-                      "eval_dataset": None, "reward_funcs": reward_functions()}
+                      "eval_dataset": None, "reward_funcs": reward_functions(active_rewards(r))}
     mt.check_signature(trainer_cls, trainer_kwargs, "GRPOTrainer")
     config = config_cls(**kwargs)
     for key, value in kwargs.items():
@@ -710,8 +772,8 @@ def run_training(r, plan: dict) -> Path:
                                   runtime_evidence(dependencies, started))
     evidence.update(
         steps=actual_steps, max_steps=kwargs["max_steps"], trainer="GRPOTrainer",
-        rewards=list(REWARD_NAMES), reward_max_scores=dict(REWARD_MAX),
-        reward_weights="四函数等权相加（TRL 默认求和）；无量纲归一化，权重未经消融",
+        rewards=active_rewards(r), reward_max_scores=dict(REWARD_MAX),
+        reward_weights="active 函数等权相加（TRL 默认求和）；无量纲归一化；drop-one 消融只在同 backbone 内",
         prompt_audit=audit, gsm8k=dict(r.get("gsm8k")), upstream_facts=UPSTREAM_FACTS,
         model_artifact=mt.artifact_manifest(output), split_manifest_path=str(manifest_path),
         train_metrics=dict(train_result.metrics),

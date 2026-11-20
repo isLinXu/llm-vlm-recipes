@@ -362,14 +362,16 @@ def test_manifest_validation_binds_revision_and_split_protocol(recipe, official)
 # --------------------------------------------------------------------------- #
 # 路由与配置漂移
 # --------------------------------------------------------------------------- #
-def test_real_recipe_is_supported_and_not_registered_in_task_router():
+def test_real_recipe_is_supported_and_registered_in_task_router():
     recipe = real_recipe()
     assert gt.require_supported(recipe) == gt.TASK_ID
-    assert recipe.get("execution.task_id") is None
-    assert task_router.resolve(recipe) is None
-    # 未注册发布级管线：声明 task_id 会被 resolve() 拒绝，而不是借用别的任务协议。
-    with pytest.raises(mt.TaskExecutionError, match="没有该 recipe 的发布级管线实现"):
-        task_router.resolve(mutated(recipe, "execution.task_id", gt.TASK_ID))
+    assert recipe.get("execution.task_id") == gt.TASK_ID
+    assert recipe.get("execution.config_id") == gt.DEFAULT_CONFIG_ID
+    assert task_router.resolve(recipe) == gt.TASK_ID
+    assert task_router.load(recipe, "suite").__name__.endswith("gsm8k_suite")
+    assert task_router.load(recipe, "export").__name__.endswith("gsm8k_export")
+    with pytest.raises(mt.TaskExecutionError, match="任务路由冲突|未知"):
+        task_router.resolve(mutated(recipe, "execution.task_id", mt.TASK_ID))
 
 
 @pytest.mark.parametrize("path,value", [
@@ -437,7 +439,7 @@ def test_config_kwargs_budget_batch_seeds(recipe, tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["dry-run", "smoke", "full"])
-def test_task_plan_exposes_protocol_and_marks_release_unavailable(mode):
+def test_task_plan_exposes_protocol_and_marks_release_available(mode):
     recipe = real_recipe()
     plan = gt.task_plan(recipe, build_plan(recipe, mode), mode)
     assert plan["execution_supported"] is True and plan["task_id"] == gt.TASK_ID
@@ -446,29 +448,35 @@ def test_task_plan_exposes_protocol_and_marks_release_unavailable(mode):
     assert plan["rewards"]["correctness_tiers"] == list(gt.CORRECTNESS_TIERS)
     assert plan["run"]["steps"] == (150 if mode == "full" else 5)
     assert plan["evaluation"]["metrics"] == list(gt.METRICS)
-    assert "unavailable" in plan["evaluation"]["release_pipeline"]
+    assert "available" in plan["evaluation"]["release_pipeline"]
+    assert plan["ablation"]["config_id"] == gt.DEFAULT_CONFIG_ID
+    assert plan["ablation"]["within_backbone"] is True
     assert plan["dataset"]["split_plan"]["official_test_rows"] == 1319
     assert build_plan(recipe, mode)["task_id"] == gt.TASK_ID
 
 
-def test_fingerprint_binds_the_gsm8k_section_and_train_params():
+def test_fingerprint_binds_the_gsm8k_section_config_id_and_train_params():
     recipe = real_recipe()
     base = be.fingerprint(recipe)
     assert be.fingerprint(mutated(recipe, "gsm8k.validation_percent", 20)) != base
     assert be.fingerprint(mutated(recipe, "gsm8k.accuracy_definition", "改")) != base
     assert be.fingerprint(mutated(recipe, "train.beta", 0.05)) != base
     assert be.fingerprint(mutated(recipe, "rewards.functions", ["a"])) != base
+    assert be.fingerprint(gt.config_recipe(recipe, "no_correctness")) != base
     assert be.fingerprint(real_recipe()) == base
 
 
-def test_release_pipeline_is_unavailable_and_baseline_stays_closed():
+def test_release_pipeline_is_available_but_baseline_stays_closed_without_evidence():
     recipe = real_recipe()
     assert be.suite_problems(recipe)
     assert be.zero_train_measured(recipe) is False
     assert not be.frozen_environment(recipe)
     runner_suite = runner("suite")
     plan = runner_suite.suite_plan(recipe, [42, 43, 44], str(ROOT / "runs" / "x"))
-    assert plan["release_pipeline"] == "unavailable"
+    assert plan.get("release_pipeline") != "unavailable"
+    assert plan["task_id"] == gt.TASK_ID
+    assert plan["ablation_configs"] == list(gt.ABLATION_CONFIGS)
+    assert len(plan["runs"]) == 5 * 3
     with pytest.raises(mt.TaskExecutionError):
         runner_suite.run_suite(recipe, [42, 43, 44], str(ROOT / "runs" / "x"))
     with pytest.raises(mt.TaskExecutionError):
@@ -668,6 +676,8 @@ def test_training_assembles_contract_and_writes_evidence_only_after_budget(recip
     assert evidence["kind"] == "training" and evidence["stage"] == "completed"
     assert evidence["task_id"] == gt.TASK_ID and evidence["steps"] == evidence["max_steps"] == 150
     assert evidence["rewards"] == list(gt.REWARD_NAMES) and evidence["baseline_promotion"] == "none"
+    assert evidence["config_id"] == gt.DEFAULT_CONFIG_ID
+    assert evidence["active_rewards"] == list(gt.REWARD_NAMES)
     assert evidence["config_sha256"] == mt.sha256_json(evidence["config"])
     assert evidence["model_artifact"]["sha256"] == mt.artifact_manifest(output)["sha256"]
     assert evidence["prompt_audit"] == {"max_prompt_tokens": 10, "limit": 512}
@@ -758,6 +768,7 @@ def create_checkpoint(path, recipe, *, mode="full"):
         "kind": "training", "stage": "completed", "mode": mode, "task_id": gt.TASK_ID,
         "recipe_id": recipe.id, "model_revision": recipe.get("model.revision"),
         "dataset_revision": recipe.get("dataset.revision"), "fingerprint": be.fingerprint(recipe),
+        "config_id": gt.config_id_of(recipe), "active_rewards": gt.active_rewards(recipe),
         "model_artifact": mt.artifact_manifest(path), "mock": True})
     return path
 

@@ -19,15 +19,15 @@
 # task_router 后由 not_implemented 改为 pending_freeze（ADR-023）——
 # 自建单框 <loc####>/IoU 协议只有 macOS ARM 隔离合成证据；gated 基座、
 # RefCOCO/COCO/Flickr 图像许可、冻结 revision、CUDA 三 seed 与业务验收全未完成。
-# 六篇五维齐备仍 eligible 0/14；两篇 ChartQA 原理性阻塞不变。
+# 九篇五维齐备仍 eligible 0/14；三篇 not_implemented、两篇 ChartQA 原理性阻塞不变。
 # 2026-11-18 第四次重新判定：DPO / MPO 两篇补齐五维并精确注册 task_router 后
 # 由 not_implemented 改为 pending_freeze（ADR-027）——自建偏好协议只有
 # macOS ARM 隔离合成证据；两篇基座不同，不得跨 backbone 归因算法；
 # revision / CUDA 三 seed / 容差 / 许可全未完成。eligible 0/14 与 ChartQA 阻塞不变。
-# 2026-11-18 第五次重新判定：GSM8K advanced-reward 篇实装 data/train/eval 三维后由
-# not_implemented 改为 partial_implementation（ADR-028）——四 reward、#### gold 剥离、
-# 独立严格 verifier 与 hacking 诊断已有离线测试；comparison/export 未实装、未注册
-# task_router；一手页面本轮未能取回，分档/标签/超参为本仓选择。eligible 0/14 不变。
+# 2026-11-18 第六次重新判定：GSM8K advanced-reward 篇补齐 comparison/export 后由
+# partial_implementation 改为 pending_freeze（ADR-029）——5 drop-one × seed 套件与
+# 整模型离线复载已有隔离测试并精确注册 task_router；仍无 CUDA 实跑 / revision 冻结 /
+# 预声明容差。eligible 0/14 不变。
 
 schema = 1
 assessed_at = "2026-11-18"
@@ -69,10 +69,10 @@ requires = ["实现只改 use_vllm 的单变量对照", "同 checkpoint/test/采
 primary_source = "https://huggingface.co/learn/cookbook; registry/capabilities.toml"
 
 [recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
-verdict = "partial_implementation"
-reason = "wave5a：gsm8k-reward-v1 的 data/train/eval 三维已有自建协议、真实任务代码与隔离离线测试——#### gold 规范化剥离且不进 prompt、官方 test 1319 题整体 held-out 与 question-hash 90/10 train/validation、四 reward 完整实装、21 个 GRPOConfig 超参显式冻结、独立严格 Decimal verifier 与 reward hacking 诊断。但 comparison（四 reward 逐项消融、同预算 zero-shot/GRPO、多 seed 聚合）与 export（打包与 HF offline 复载）未实装，发布级路由未注册；一手页面本轮未能重新取回，分档条件/标签/超参为本仓选择，不冒充上游。全部只有 macOS ARM 离线合成证据：无 CUDA 实跑、无 completed 证据。"
-blockers = ["comparison/export 两维未实装，task_router 未注册，发布级套件/导出 unavailable", "model/dataset/source revision 与可安装镜像锁未冻结，frozen lock 仍为模板", "四 reward 等权相加未经逐项消融，分档条件/标签/超参尚未回一手页面核对", "GPU verified 0，无真实 completed training/evaluation 证据"]
-requires = ["实装 comparison：drop-one 四 reward 消融 × 三独立训练 seed、同预算 zero-shot/GRPO 与聚合", "实装 export：模型 + reward 配置 + tokenizer 打包与 HF offline 新进程复载，并精确注册 task_router", "回一手页面核对四 reward 分档/标签/超参并显式改写偏差", "授权 Linux CUDA 环境冻结全部 revision、实跑三 seed，基于实跑预声明容差后独立验收"]
+verdict = "pending_freeze"
+reason = "wave5b：gsm8k-reward-v1 五维代码与隔离离线测试齐备——#### gold 规范化剥离、官方 test held-out、四 reward + 5 drop-one 消融 × 独立训练 seed 的 gsm8k_suite、整模型 safetensors 的 gsm8k_export，task_router 精确注册。消融只在同一 Qwen2.5-3B backbone 内；四函数等权相加未经量纲归一化；一手页面本轮未能重新取回，分档/标签/超参为本仓选择。全部只有 macOS ARM 离线合成证据：无 CUDA 实跑、revision/export_tolerance 未冻结。"
+blockers = ["model/dataset/source revision 与可安装镜像锁未冻结，frozen lock 仍为模板", "GPU verified 0，无真实 completed training/evaluation/suite/export 证据", "四函数等权相加未经量纲归一化；分档条件/标签/超参尚未回一手页面核对", "真实 recipe 未预声明 export_tolerance，--full 导出失败关闭"]
+requires = ["授权 Linux CUDA 环境锁定全部 revision 与 frozen environment", "真实 5 消融 × 3 seed 实跑、基于实跑预声明容差后独立验收、HF offline 复载", "回一手页面核对四 reward 分档/标签/超参并显式改写偏差", "完成许可与业务验收后重新核一手材料并显式改写 verdict"]
 primary_source = "https://huggingface.co/learn/cookbook/trl_grpo_reasoning_advanced_reward；registry/evidence.toml"
 
 [recipes."llm/sft/llama3-8b-xlam-function-calling"]

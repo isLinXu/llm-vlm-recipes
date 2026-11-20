@@ -121,7 +121,7 @@
     "gap_directions": 0,
     "gpu_verified": 0,
     "implemented_directions": 5,
-    "implemented_recipes": 8,
+    "implemented_recipes": 9,
     "methodology_papers": 23,
     "post_training_directions": 5,
     "principle_blocked_recipes": [
@@ -160,10 +160,10 @@
         "--report",
         "{out}"
       ],
-      "bytes": 66672,
+      "bytes": 66958,
       "path": "docs/BASELINE-READINESS.md",
       "purpose": "B0–B3 就绪、能力矩阵与缺口",
-      "sha256": "aabb4a9cec4f466618f25eb568afda92fcaa75dbdf8f9b5b3383939d33c6f00c"
+      "sha256": "73aee2dab14360c260b934c278087fd01fcd9db38bc34f56b053fb15d75d96ed"
     },
     {
       "argv": [
@@ -171,10 +171,10 @@
         "--report",
         "{out}"
       ],
-      "bytes": 10730,
+      "bytes": 10876,
       "path": "docs/METHODOLOGY.md",
       "purpose": "方法论依据、一手论文核查与编号更正",
-      "sha256": "ab3f7de54d130ffa75781b99b33a64cd32b16fda9707a50c38326e81a69b8703"
+      "sha256": "b3b5a3f4f86fe0d7548f274e5ee583f1fcb36571b428bb33fed7142e71720dc2"
     },
     {
       "argv": [
@@ -182,10 +182,10 @@
         "--report",
         "{out}"
       ],
-      "bytes": 7795,
+      "bytes": 7925,
       "path": "docs/MLLM-POST-TRAINING.md",
       "purpose": "MLLM 后训练五方向与逐篇映射",
-      "sha256": "29f6f4d00f7ccbe86b1bcf564e95b20e1a2066d45a948d47bdbd677c2d2623cb"
+      "sha256": "32b433c0dad5a1b5359a9f67e6d832d29fffdecac6c6bffd721ca006ee047127"
     }
   ],
   "guardrails": [

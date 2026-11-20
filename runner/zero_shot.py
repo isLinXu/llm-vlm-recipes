@@ -87,7 +87,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="recipe-lab base zero-shot 评估")
     ap.add_argument("--recipe", required=True)
     ap.add_argument("--task-id")
-    ap.add_argument("--config-id", help="RapidFire 4 配置或 MPO 三损失消融之一；只覆盖 [train]/[peft]/execution.config_id")
+    ap.add_argument("--config-id", help="RapidFire 4 配置、MPO 三损失消融或 GSM8K drop-one reward 消融之一；只覆盖 [train]/[peft]/execution.config_id")
     ap.add_argument("--eval-split", choices=("test", "validation"), default="test",
                     help="RapidFire 发布级：validation 只用于选配置，test 只用于最终验收")
     group = ap.add_mutually_exclusive_group()
@@ -104,8 +104,10 @@ def main() -> int:
                 r = rapidfire_adapter.config_recipe(r, args.config_id)
             elif r.id == mpo_adapter.RECIPE_ID:
                 r = mpo_adapter.config_recipe(r, args.config_id)
+            elif r.id == gsm8k_adapter.RECIPE_ID:
+                r = gsm8k_adapter.config_recipe(r, args.config_id)
             else:
-                raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO 多配置 recipe")
+                raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO / GSM8K 多配置 recipe")
         plan = zero_shot_plan(r, args.task_id, args.output_root, args.eval_split)
     except (ValueError, TaskExecutionError) as exc:
         ap.exit(1, f"参数错误：{exc}\n")

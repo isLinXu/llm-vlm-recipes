@@ -245,8 +245,8 @@ def render(root: Path, recipes: Iterable[Recipe]) -> str:
                   "但两篇基座不同，`cross_backbone_attribution_valid=false`。以上改判 pending_freeze "
                   "**只是代码齐备，不是晋级**：仍无冻结 revision / CUDA 三 seed 实跑 / 预声明容差 / "
                   "真实 HF offline 复载 / 许可与业务验收。两篇 ChartQA 保持原理性阻塞，不计入「适配进度」；"
-                  "`llm/grpo/qwen2-5-3b-advanced-reward` 以自建 `gsm8k-reward-v1` 补齐 data/train/eval 三维"
-                  "（partial_implementation，comparison/export 仍缺，未注册 task_router）；其余 3 篇仍为 not_implemented。", ""])
+                  "`llm/grpo/qwen2-5-3b-advanced-reward` 以自建 `gsm8k-reward-v1` 补齐五维"
+                  "（pending_freeze：5 drop-one reward 消融 × seed 套件与整模型离线复载，task_router 已注册）；其余 3 篇仍为 not_implemented。", ""])
     if checked.errors:
         lines.extend(["### 登记完整性错误", ""] + [f"- [FAIL] {e}" for e in checked.errors] + [""])
     return "\n".join(lines)

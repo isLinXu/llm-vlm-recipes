@@ -574,7 +574,7 @@ stance = "vLLM 收益属 serving 层（PagedAttention 一手摘要），必须�
 principles = ["reward_hacking_needs_independent_metric", "multiseed_underspecification", "self_consistency_not_for_repro"]
 primary_papers = ["reward_overopt", "underspecification", "self_consistency"]
 supplement_papers = []
-stance = "四 reward 与 GSM8K 消融的方法论动机是 reward 过优化与欠规范；本仓已实装 data/train/eval 三维（gold 剥离、独立严格 verifier、reward hacking 诊断），四 reward 逐项消融与多 seed 聚合（comparison）及导出复载（export）仍缺。"
+stance = "四 reward 与 GSM8K 消融的方法论动机是 reward 过优化与欠规范；本仓五维已实装：gold 剥离、独立严格 verifier、reward hacking 诊断，5 个 drop-one 消融（full/no_format_exact/no_format_approx/no_correctness/no_extraction）× 独立训练 seed 的套件与整模型离线复载；四函数等权相加未经归一化，消融只在同一 backbone 内，reward hacking 诊断只是信号。"
 
 [recipes."llm/sft/starcoder1b-fim"]
 principles = ["fim_augmentation_preserves_l2r", "dedup_reduces_leakage", "completion_only_loss", "peft_lora_reduces_memory"]

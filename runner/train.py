@@ -144,7 +144,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="recipe-lab 受控训练入口")
     ap.add_argument("--recipe", required=True)
     ap.add_argument("--task-id", help="显式任务路由：math-grpo-v1 / code-fim-v1 / xlam-fc-v1 / rapidfire-sft-v1 / granite-linecomparison-v1；与recipe必须匹配")
-    ap.add_argument("--config-id", help="RapidFire 4 配置或 MPO 三损失消融之一；只覆盖 [train]/[peft]/execution.config_id，默认取 recipe 声明")
+    ap.add_argument("--config-id", help="RapidFire 4 配置、MPO 三损失消融或 GSM8K drop-one reward 消融之一；只覆盖 [train]/[peft]/execution.config_id，默认取 recipe 声明")
     group = ap.add_mutually_exclusive_group()
     group.add_argument("--dry-run", action="store_true")
     group.add_argument("--smoke", action="store_true")
@@ -161,8 +161,10 @@ def main() -> int:
                 r = rapidfire_adapter.config_recipe(r, args.config_id)
             elif r.id == mpo_adapter.RECIPE_ID:
                 r = mpo_adapter.config_recipe(r, args.config_id)
+            elif r.id == gsm8k_adapter.RECIPE_ID:
+                r = gsm8k_adapter.config_recipe(r, args.config_id)
             else:
-                raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO 多配置 recipe")
+                raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO / GSM8K 多配置 recipe")
         adapter = TASK_ADAPTERS.get(r.id)
         planner = adapter.task_plan if adapter else task_plan
         plan = output_plan(planner(r, build_plan(r, mode=mode), mode, args.task_id), ROOT, args.output_root)

@@ -430,12 +430,20 @@ P1–P3（锁定 → 零训练基线实测 → 首跑与多轮评估）。这部
 - 决策三（登记联动）：capabilities 五维改 `implemented`，feasibility 改 `pending_freeze`，evidence 增补 `dpo_adapter_audit` / `mpo_adapter_audit`；后训练方向 5/5 有五维支撑后，`gate-post-training` 提升目标改为 `--min-fivedim-directions 99` 继续失败关闭。
 - 边界：全部是 macOS ARM 隔离合成证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变。隐式奖励不等于人类偏好一致率；若要做 DPO vs MPO 算法消融，必须换 shared backbone 或显式改写对照目标。
 
+## ADR-029 — wave5b GSM8K 四 reward：补齐 comparison/export，升到 pending_freeze
+
+- 背景：ADR-028 只交付 data/train/eval；comparison/export 缺失时不得注册 task_router。
+- 决策一（drop-one 消融）：`gsm8k_suite` 跑 full / no_format_exact / no_format_approx / no_correctness / no_extraction 五个配置 × 独立训练 seed；超参逐字相同，唯一变量是被去掉的 reward 函数；固定官方 test held-out 与 greedy；逐题独立严格 Decimal verifier 重算三项指标；按 config_id 分组 Student-t95。
+- 决策二（整模型导出）：`gsm8k_export` 打包完整 safetensors + tokenizer + 消融 config_id；HF offline 新进程真实调用 `gsm8k_task.run_evaluation`；真实 recipe 未预声明 `export_tolerance` 时 `--full` 失败关闭。
+- 决策三（精确路由）：`execution.task_id=gsm8k-reward-v1`、`config_id` 进 fingerprint；task_router / C306 / C307 / C405 精确分派；capabilities 五维 `implemented`，feasibility `pending_freeze`。
+- 边界：四函数等权相加未经量纲归一化；一手 Cookbook 页面本轮仍未重新抓取；仅 macOS ARM 隔离合成证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变。
+
 ## ADR-028 — wave5a GSM8K 四 reward：三维 partial_implementation，不注册 task_router
 
 - 背景：`llm/grpo/qwen2-5-3b-advanced-reward` 原为 not_implemented；一手 Cookbook 页面本轮无法重新抓取，因此除 recipe 已登记的四 reward 名称与量级外，档位、标签与超参均标注为「本仓自建」，待回查原页面。
 - 决策一（自建协议 `gsm8k-reward-v1`）：`####` gold 剥离并 Decimal 规范化，推理文本永不进 prompt；官方 train 按 question hash 90/10 切 train/validation，官方 test 1319 题整体 held-out；独立严格 Decimal 校验器重算 correctness，`reward_hacking_rate`（三个格式 reward 满分但答案错）与 near_miss/soft_format_only 作为诊断；`trl==0.14.0` 全参 GRPO，21 个超参显式写入 `[train]`，提示 token 长度审计。
 - 决策二（诚实分段）：capabilities 仅 data/train/eval 记 `implemented`；comparison（drop-one × 3 seed）与 export 仍 `missing`；feasibility 改为 `partial_implementation`（恰三维实装）；recipe 不声明 `execution.task_id`，task_router 不注册，`runner/suite.py` 报 `release_pipeline: unavailable`。
-- 边界：四 reward 等权相加未经消融也未归一化；仅 macOS ARM 离线合成/fake-runtime 证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变，`--min-*` 目标仍失败关闭。
+- 边界：四 reward 等权相加未经消融也未归一化；仅 macOS ARM 离线合成/fake-runtime 证据；GPU verified 0、B2+/B3 0、L2+ 0、eligible 0/14 未变，`--min-*` 目标仍失败关闭。ADR-029 已补齐发布级两维并改判 pending_freeze。
 
 ---
 

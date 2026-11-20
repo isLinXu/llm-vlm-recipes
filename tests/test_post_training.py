@@ -73,7 +73,7 @@ def test_real_registry_is_clean(real_audit):
     assert real_audit.counts["sources"] == 3
     assert real_audit.counts["directions"] == 5
     assert real_audit.counts["recipes"] == 14
-    assert real_audit.counts["implemented_recipes"] == 8
+    assert real_audit.counts["implemented_recipes"] == 9
 
 
 def test_covers_all_recipes(real_audit, recipes):
@@ -112,7 +112,7 @@ def test_blocked_and_contaminated_are_not_valid_coverage(real_audit):
 def test_implementation_state_is_recomputed_from_capabilities(real_audit):
     implemented = {rid for rid, row in real_audit.rows.items()
                    if row["implementation_state"] == "five_dimension_implemented"}
-    assert len(implemented) == 8
+    assert len(implemented) == 9
     assert "llm/grpo/qwen2-0-5b-numinamath" in implemented
     assert "vlm/dpo/smolvlm-rlaif-v" in implemented
     assert "vlm/mpo/qwen2-5-vl-3b-mpo" in implemented
@@ -268,7 +268,7 @@ def test_capability_drift_changes_implementation_state(tmp_path, recipes):
     a = pm.audit(_sandbox(tmp_path, capabilities=cap), recipes)
     assert a.ok
     assert a.rows["llm/grpo/qwen2-0-5b-numinamath"]["implementation_state"] == "not_implemented"
-    assert a.counts["implemented_recipes"] == 7
+    assert a.counts["implemented_recipes"] == 8
 
 
 def test_feasibility_drift_changes_coverage_validity(tmp_path, recipes):

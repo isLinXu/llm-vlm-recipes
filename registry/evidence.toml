@@ -403,6 +403,13 @@ primary_facts = "Qwen2-VL-7B ChartQA 起点篇上游第 6 节明确称 base mode
 decision = "两篇分别判定 blocked_zero_train 与 contaminated_pretraining，登记到 registry/feasibility.toml，并进入 baseline --min-state B2/B3 的硬门禁。这是原理性阻塞：补齐五维代码、CUDA 三 seed 实跑或 completed evidence 都不能解除，必须改写实验目标 / 换未污染外部集 / 重核一手材料后显式改写 verdict。"
 limits = "判定只针对「能否作泛化 baseline」，不否认这两篇作为教学/方法谱系索引的价值；wave3 实装改从 granite-vision-line-comparison 开始。"
 
+[gsm8k_adapter_audit]
+assessed_at = "2026-11-18"
+sources = ["https://huggingface.co/learn/cookbook/trl_grpo_reasoning_advanced_reward", "https://huggingface.co/datasets/openai/gsm8k"]
+primary_facts = "Qwen/Qwen2.5-3B-Instruct + openai/gsm8k (main)；上游核实四 reward 名与分值上限、官方 GSM8K 与单题 expected_answer 格式检查；无 held-out 评估、无训练 seed、无完整 GRPOConfig 超参。本轮一手页面未能重新抓取。"
+local_deviations = "已实装 gsm8k-reward-v1 五维（src/recipe_lab/gsm8k_task.py / gsm8k_suite.py / gsm8k_export.py + tests/test_gsm8k.py / test_gsm8k_release.py）：#### gold Decimal 规范化剥离、官方 train question-hash 90/10、官方 test 1319 held-out、四 reward + 5 drop-one 消融 × seed、独立严格 verifier 与 reward_hacking_rate、整模型 safetensors HF offline 复载。task_router 精确注册；分档/标签/超参为本仓选择。真实 recipe 未预声明 export_tolerance，--full 失败关闭。"
+limits = "本条不是 GPU 实跑证据。只有 macOS ARM 隔离合成 fake runtime 与受控 worker 测试；model/dataset revision、可安装镜像锁、依赖版本与许可均未确认；evaluation.expected/tolerance/export_tolerance 未基于实跑预声明；无 completed evidence、GPU verified 0、B2+/B3 0、eligible 0/14。可行性由 partial_implementation 改判 pending_freeze 只反映五维代码齐备。四函数等权相加未经量纲归一化。"
+
 [dpo_adapter_audit]
 assessed_at = "2026-11-18"
 sources = ["https://huggingface.co/learn/cookbook/fine_tuning_vlm_dpo_smolvlm_instruct", "https://huggingface.co/datasets/HuggingFaceH4/rlaif-v_formatted"]

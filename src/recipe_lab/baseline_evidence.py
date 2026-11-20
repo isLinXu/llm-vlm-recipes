@@ -88,6 +88,8 @@ def fingerprint(r):
     # 写在 [gsm8k]；不绑定，改了拆分或定义后旧 checkpoint 仍能冒充当前实验产物。
     if r.get("gsm8k") is not None:
         payload["gsm8k"] = r.get("gsm8k")
+        if r.get("execution.config_id") is not None:
+            payload["config_id"] = r.get("execution.config_id")
     payload["task_id"] = r.get("execution.task_id")
     payload["evaluation"] = {key: r.get("evaluation." + key) for key in ("metrics", "split", "seed")}
     if any(r.get(name) is not None for name in ("fim", "xlam", "rapidfire", "granite", "paligemma",
@@ -160,6 +162,7 @@ def frozen_environment(r):
                                "bitsandbytes", "safetensors"},
             "qwen25vl-mpo-v1": {"torch", "transformers", "datasets", "peft",
                                 "bitsandbytes", "safetensors"},
+            "gsm8k-reward-v1": {"torch", "transformers", "datasets", "trl"},
         }.get(r.get("execution.task_id"))
         if required is None:
             # 未声明发布级 task_id 的任务按协议段判定：RapidFire 是 Trainer + fp16 LoRA，
@@ -255,7 +258,7 @@ def runtime_consistent(r, evidence):
 def evaluation_problems(r, data, path, *, role, manifest=None):
     task = _task(r)
     if task in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1", "gsm8k-reward-v1"):
         # FIM 用 PSM 输入/gold 重建器，xLAM 用严格 JSON prompt/tools/gold 重建器，
         # RapidFire 用 completion-only 5 列 raw / 无 stemmer ROUGE-L 重建器；
         # DPO/MPO 用偏好对 raw + 隐式奖励 pairwise 重建器；都不套用数学协议，也不互相借用。
@@ -313,7 +316,7 @@ def suite_problems(r):
 def _suite_problems(r):
     task = _task(r)
     if task in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1", "gsm8k-reward-v1"):
         from .task_router import load
         return load(r, "suite").suite_problems(r)
     if task != "math-grpo-v1":
@@ -430,7 +433,7 @@ def zero_train_measured(r):
         if not valid:
             return False
         if _task(r) in ("code-fim-v1", "xlam-fc-v1", "rapidfire-sft-v1", "granite-linecomparison-v1",
-                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1"):
+                            "paligemma-grounding-v1", "smolvlm-dpo-v1", "qwen25vl-mpo-v1", "gsm8k-reward-v1"):
             from .task_router import load
             load(r, "suite").zero_train_validation(r, data, path)
             return True

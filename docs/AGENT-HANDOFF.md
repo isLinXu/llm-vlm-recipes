@@ -10,7 +10,7 @@
 
 ## 当前事实
 
-- 配方：**14 篇**；五维已实现 **8 篇**；GPU verified **0**；eligible **0**。
+- 配方：**14 篇**；五维已实现 **9 篇**；GPU verified **0**；eligible **0**。
 - 方法论：**20/23** 篇论文一手核实。
 - 后训练方向：**5/5** 有五维实现支撑，缺口 **0** 个。
 - 原理性阻塞：`vlm/sft/qwen2-vl-7b-chartqa`, `vlm/sft/smolvlm-chartqa`。
@@ -44,9 +44,9 @@
 | --- | --- | --- | --- |
 | `docs/MATRIX.md` | `matrix --out {out}` | `d6d3f0b5bc99` | 全量 14 篇索引与五维矩阵 |
 | `docs/REPRODUCIBILITY.md` | `repro --report {out}` | `36df533d1b19` | 上游可复现性历史审计 |
-| `docs/BASELINE-READINESS.md` | `baseline --report {out}` | `aabb4a9cec4f` | B0–B3 就绪、能力矩阵与缺口 |
-| `docs/METHODOLOGY.md` | `methodology --report {out}` | `ab3f7de54d13` | 方法论依据、一手论文核查与编号更正 |
-| `docs/MLLM-POST-TRAINING.md` | `post-training --report {out}` | `29f6f4d00f7c` | MLLM 后训练五方向与逐篇映射 |
+| `docs/BASELINE-READINESS.md` | `baseline --report {out}` | `73aee2dab143` | B0–B3 就绪、能力矩阵与缺口 |
+| `docs/METHODOLOGY.md` | `methodology --report {out}` | `b3b5a3f4f86f` | 方法论依据、一手论文核查与编号更正 |
+| `docs/MLLM-POST-TRAINING.md` | `post-training --report {out}` | `32b433c0dad5` | MLLM 后训练五方向与逐篇映射 |
 
 ## 命令契约
 

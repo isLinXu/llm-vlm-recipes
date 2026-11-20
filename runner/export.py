@@ -12,6 +12,8 @@ CODE_ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.environ.get("RECIPE_LAB_ROOT", str(CODE_ROOT))).resolve()
 sys.path.insert(0, str(CODE_ROOT / "src"))
 
+from recipe_lab import gsm8k_task as gsm8k_adapter
+from recipe_lab import mpo_task as mpo_adapter
 from recipe_lab import rapidfire_task as rapidfire_adapter
 from recipe_lab import task_router
 from recipe_lab.loader import load_recipes
@@ -72,9 +74,14 @@ def main():
         else:
             r = find_recipe(args.recipe)
             if args.config_id:
-                if r.id != rapidfire_adapter.RECIPE_ID:
-                    raise TaskExecutionError("--config-id 只适用于 RapidFire 多配置 recipe")
-                r = rapidfire_adapter.config_recipe(r, args.config_id)
+                if r.id == rapidfire_adapter.RECIPE_ID:
+                    r = rapidfire_adapter.config_recipe(r, args.config_id)
+                elif r.id == mpo_adapter.RECIPE_ID:
+                    r = mpo_adapter.config_recipe(r, args.config_id)
+                elif r.id == gsm8k_adapter.RECIPE_ID:
+                    r = gsm8k_adapter.config_recipe(r, args.config_id)
+                else:
+                    raise TaskExecutionError("--config-id 只适用于 RapidFire / MPO / GSM8K 多配置 recipe")
             # dry-run 仅读声明，不检查 checkpoint，也不读取其 seed / config_id。
             if args.full:
                 r = effective_recipe(r, args.checkpoint)

@@ -76,7 +76,7 @@ definition = "把 DPO / RLAIF 等偏好优化扩展到多模态，处理视觉�
 primary_source = "mllm_post_training_survey"
 cross_check_source = "llm_post_training_survey"
 support = "paper_supports"
-boundary = "偏好数据构建与裁判模型本身可能引入偏差；本仓尚无五维实现的偏好校准任务，登记中的 DPO/MPO 只是 cataloged。"
+boundary = "偏好数据构建与裁判模型本身可能引入偏差；本仓 SmolVLM DPO 与 Qwen2.5-VL MPO 已有自建五维离线实现（ADR-027），但两者基座不同不可跨 backbone 归因算法，且 GPU verified 0、均非已验收 baseline。"
 
 [directions.reasoning_enhancement]
 label = "推理增强"
@@ -109,7 +109,7 @@ boundary = "综述 v1 用词 scalable training、v2 用词 scalable learning，�
 [recipes."agent/grpo/wordle-openenv-hf-jobs"]
 primary = ["reasoning_enhancement"]
 secondary = ["scalable_learning"]
-rationale = "Wordle 环境交互 + GRPO 可验证奖励，属于推理增强；在线环境采样也触及效率与扩展问题。当前仅 cataloged。"
+rationale = "Wordle 环境交互 + GRPO 可验证奖励，属于推理增强；在线环境采样也触及效率与扩展问题。当前五维尚未实现（not_implemented）。"
 
 [recipes."llm/grpo/qwen2-0-5b-numinamath"]
 primary = ["reasoning_enhancement"]
@@ -124,7 +124,7 @@ rationale = "vLLM colocate 关注 GRPO 训练中的推理引擎共置与资源�
 [recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
 primary = ["reasoning_enhancement"]
 secondary = ["preference_calibration"]
-rationale = "高级奖励设计服务多步推理，奖励塑形同时带有偏好校准色彩；当前未实现。"
+rationale = "高级奖励设计服务多步推理，奖励塑形同时带有偏好校准色彩；wave5b 已完成 gsm8k-reward-v1 五维离线实现（5 drop-one × seed + 整模型离线复载），GPU verified 0。"
 
 [recipes."llm/sft/llama3-8b-xlam-function-calling"]
 primary = ["instruction_following"]

@@ -133,7 +133,7 @@ id = "wave6"
 label = "方法与模态扩展"
 dependencies = ["wave1", "wave2", "wave3", "wave4", "wave5"]
 prerequisites = "前序 shared backbone、数据冻结、聚合、复载协议全部验收；范围与许可单独审批。"
-work = "GSM8K 4 reward 的 data/train/eval 已由 wave5a 自建 gsm8k-reward-v1 离线实装（partial_implementation），仍补 drop-one 消融 comparison 与 export 发布级两维；按自动 family 缺口推进 KTO/RM/RLOO/online-DPO/GSPO/蒸馏/ORPO/CPO/GKD/prompt-tuning；CPT/DAPT、音视频另立模块。"
+work = "GSM8K 4 reward 五维已由 wave5b 自建 gsm8k-reward-v1 离线实装并改判 pending_freeze（5 drop-one × seed + 整模型 export，task_router 已注册）；按自动 family 缺口推进 KTO/RM/RLOO/online-DPO/GSPO/蒸馏/ORPO/CPO/GKD/prompt-tuning；CPT/DAPT、音视频另立模块。"
 acceptance = "每种方法有独立配方、offline tests、真实完成 evidence、3 seeds 对照与交付回归；未纳入 taxonomy 的模块先定契约，禁止用登记数宣称全生态覆盖。"
 
 [recipes."agent/grpo/wordle-openenv-hf-jobs"]
@@ -161,12 +161,12 @@ comparison = { status = "missing", note = "缺只改变 vLLM 开关的同配置 
 export = { status = "missing", note = "缺 adapter/base 合并或复载策略、vLLM/HF 输出一致性与权重同步回归。" }
 
 [recipes."llm/grpo/qwen2-5-3b-advanced-reward"]
-wave = "wave6"
+wave = "wave5"
 data = { status = "implemented", implementation = ["src/recipe_lab/gsm8k_task.py"], tests = ["tests/test_gsm8k.py"], note = "自建 gsm8k-reward-v1（非上游复现）：严格 question/answer 两列 schema；gold 取自恰一个 #### 之后的单个数字并规范化为 Decimal 字符串，缺失/多个分隔符/不可解析一律 DatasetValidationError，推理文本永不进 prompt；官方 train 按 sha256(data_seed:规范化 question) 取模 100 切 90/10 train/validation，官方 test 1319 题整体 held-out，行数与官方声明不符、test 内重复、与 train/validation 题目重叠即拒绝，train/validation 全局去重并登记丢弃索引；manifest 只存 hash。仅离线合成数据验证，未加载真实 GSM8K、revision 与许可未确认。" }
 train = { status = "implemented", implementation = ["src/recipe_lab/gsm8k_task.py", "src/recipe_lab/plan.py", "runner/train.py"], tests = ["tests/test_gsm8k.py"], note = "全参数 GRPO（trl==0.14.0，fp32 权重 + bf16 autocast，use_vllm=false）：match_format_exactly(3.0)、match_format_approximately(逐 token ±0.5，上限 2.0)、check_answer_correctness(3.0/1.5/0.5/-0.5)、check_numbers_extraction(1.5) 四函数完整实装且等权求和，分档条件与标签为本仓选择；gold 不可解析时抛错而非给分；GRPOConfig 21 个超参全部显式冻结（缺任一即拒绝），API signature 与实际应用值、预算 full150/smoke5、prompt 最大 token 不得触发静默截断、frozen lock/代码身份均校验。仅 fake runtime 离线验证，无 GPU 实跑。" }
 eval = { status = "implemented", implementation = ["src/recipe_lab/gsm8k_task.py", "runner/eval.py", "runner/zero_shot.py"], tests = ["tests/test_gsm8k.py"], note = "官方 test 逐题 greedy 单样本；独立严格 Decimal verifier（不依赖 math_verify、不复用 reward 的 0.5 近似档）重算 pass@1 / format_compliance / reward_hacking_rate，并给出近似档占比、soft-format-only 占比与逐 reward 均值诊断；zero-shot 只加载冻结 base、训练评估必须有 completed checkpoint 且无 base fallback，拒绝重复 decode 冒充多 seed。reward_hacking 只是诊断信号，不能单独证明或排除；GPU 未测，0 verified。" }
-comparison = { status = "missing", note = "缺四 reward 逐项消融（drop-one × 至少三独立训练 seed）、同预算 zero-shot/GRPO 对照与 multi-training-seed aggregate；四函数等权相加未经消融也未量纲归一化。未注册 task_router，发布级套件 unavailable。" }
-export = { status = "missing", note = "缺模型、reward 配置、tokenizer 打包与 HF offline 新进程复载、官方 test 回归；未注册 task_router，发布级导出 unavailable。" }
+comparison = { status = "implemented", implementation = ["src/recipe_lab/gsm8k_suite.py", "src/recipe_lab/task_router.py", "runner/suite.py"], tests = ["tests/test_gsm8k_release.py"], note = "gsm8k_suite：5 个 drop-one reward 消融（full/no_format_exact/no_format_approx/no_correctness/no_extraction）× 独立训练 seed；固定官方 test held-out 与 greedy；逐题独立严格 Decimal verifier 重算 pass@1 / format_compliance / reward_hacking_rate；按 config_id 分组 Student-t95。消融只在同一 Qwen2.5-3B backbone 内，四函数等权相加未经量纲归一化。仅隔离离线合成证据，无 GPU 实跑。" }
+export = { status = "implemented", implementation = ["src/recipe_lab/gsm8k_export.py", "src/recipe_lab/task_router.py", "runner/export.py"], tests = ["tests/test_gsm8k_release.py"], note = "gsm8k_export：整模型 safetensors + tokenizer + reward 消融 config_id 打包；HF offline 新进程真实调用 gsm8k_task.run_evaluation 复载，不复制 JSON；真实 recipe 未预声明 export_tolerance 时 --full 失败关闭。仅隔离离线合成证据，无 GPU 复载。" }
 
 [recipes."llm/sft/llama3-8b-xlam-function-calling"]
 wave = "wave2"

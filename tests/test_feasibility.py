@@ -86,11 +86,11 @@ def test_real_registry_is_complete_and_no_recipe_is_eligible(real_audit):
     assert set(real_audit.recipes) == IDS and len(IDS) == 14
     assert real_audit.counts["total"] == 14
     assert real_audit.counts["eligible"] == 0
-    assert real_audit.counts["pending_freeze"] == 8
+    assert real_audit.counts["pending_freeze"] == 9
     assert real_audit.counts["not_implemented"] == 3
-    # ADR-022 / ADR-023 一度使 partial_implementation 归零；ADR-028 起 advanced-reward
-    # 以 data/train/eval 三维实装再次进入该状态（comparison/export 仍 missing）。
-    assert real_audit.counts["partial_implementation"] == 1
+    # ADR-022 / ADR-023 / ADR-029 补齐发布级两维后，partial_implementation 再次归零；
+    # 枚举与交叉校验仍保留，防止未来出现「只做三维」的篇目被误判。
+    assert real_audit.counts["partial_implementation"] == 0
     assert real_audit.counts["blocked_zero_train"] == 1
     assert real_audit.counts["contaminated_pretraining"] == 1
     assert len(real_audit.promotion_blocking) == 14
@@ -99,6 +99,7 @@ def test_real_registry_is_complete_and_no_recipe_is_eligible(real_audit):
 
 @pytest.mark.parametrize("rid,verdict", [
     ("llm/grpo/qwen2-0-5b-numinamath", "pending_freeze"),
+    ("llm/grpo/qwen2-5-3b-advanced-reward", "pending_freeze"),
     ("llm/sft/llama3-8b-xlam-function-calling", "pending_freeze"),
     ("llm/sft/rapidfire-multiconfig", "pending_freeze"),
     ("llm/sft/starcoder1b-fim", "pending_freeze"),

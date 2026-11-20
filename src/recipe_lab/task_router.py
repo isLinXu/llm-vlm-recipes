@@ -15,6 +15,7 @@ GRANITE = "granite-linecomparison-v1"
 PALIGEMMA = "paligemma-grounding-v1"
 DPO = "smolvlm-dpo-v1"
 MPO = "qwen25vl-mpo-v1"
+GSM8K = "gsm8k-reward-v1"
 
 
 def resolve(r) -> str | None:
@@ -26,10 +27,12 @@ def resolve(r) -> str | None:
     from . import mpo_task as mpt
     from . import paligemma_task as pt
     from . import rapidfire_task as rf
+    from . import gsm8k_task as gt8k
     from . import xlam_task as xt
     by_id = {mt.RECIPE_ID: MATH, ft.RECIPE_ID: FIM, xt.RECIPE_ID: XLAM,
              rf.RECIPE_ID: RAPIDFIRE, gt.RECIPE_ID: GRANITE,
-             pt.RECIPE_ID: PALIGEMMA, dt.RECIPE_ID: DPO, mpt.RECIPE_ID: MPO}.get(r.id)
+             pt.RECIPE_ID: PALIGEMMA, dt.RECIPE_ID: DPO, mpt.RECIPE_ID: MPO,
+             gt8k.RECIPE_ID: GSM8K}.get(r.id)
     values = {value for value in (r.get("execution.task_id"), by_id) if value is not None}
     if len(values) > 1:
         raise TaskExecutionError(f"任务路由冲突：recipe={r.id}, candidates={sorted(values)}")
@@ -39,7 +42,7 @@ def resolve(r) -> str | None:
         raise TaskExecutionError(
             f"recipe={r.id} 声明了 execution.task_id，但没有该 recipe 的发布级管线实现；拒绝借用其他任务协议")
     task_id = next(iter(values))
-    if task_id not in (MATH, FIM, XLAM, RAPIDFIRE, GRANITE, PALIGEMMA, DPO, MPO):
+    if task_id not in (MATH, FIM, XLAM, RAPIDFIRE, GRANITE, PALIGEMMA, DPO, MPO, GSM8K):
         raise TaskExecutionError(f"未知 execution.task_id={task_id!r}；拒绝通用发布级验收")
     return task_id
 
@@ -82,6 +85,12 @@ def _module(task_id, kind):
         # 三损失消融只在同一 backbone 内，不把 DPO 篇当算法消融。
         return {"task": "mpo_task", "suite": "mpo_suite",
                 "export": "mpo_export"}[kind]
+    if task_id == GSM8K:
+        # GSM8K 四 reward 是全参数 GRPO：drop-one 消融 × 独立 seed 编排，
+        # 独立严格 Decimal verifier 重算 pass@1 / format_compliance /
+        # reward_hacking_rate；导出整模型 safetensors（非 adapter）。
+        return {"task": "gsm8k_task", "suite": "gsm8k_suite",
+                "export": "gsm8k_export"}[kind]
     raise TaskExecutionError(f"没有实现 {task_id!r} 的 {kind} 管线；不得用数学协议替代")
 
 

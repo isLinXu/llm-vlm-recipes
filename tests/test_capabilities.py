@@ -60,29 +60,23 @@ def test_actual_registry_exact_coverage_and_counts():
     result = cap.audit(ROOT, recipes)
     assert result.ok, result.errors
     assert result.registered_recipes == result.capability_entries == 14
-    # 八篇五维齐备（数学/FIM/xLAM/RapidFire/Granite/PaliGemma/DPO/MPO）；implemented 只表示
+    # 九篇五维齐备（数学/FIM/xLAM/RapidFire/Granite/PaliGemma/DPO/MPO/GSM8K）；implemented 只表示
     # 代码 + offline test，GPU 实测与 completed 证据仍为 0，不得据此晋级 B2/B3。
-    # 另有 advanced-reward 仅 data/train/eval 三维实装（partial_implementation，ADR-028）。
     assert result.implemented_recipes == 9 and result.gpu_verified_recipes == 0
-    assert result.totals == {"missing": 27, "implemented": 43, "unverified": 0, "verified": 0}
+    assert result.totals == {"missing": 25, "implemented": 45, "unverified": 0, "verified": 0}
     per_dimension = {dimension: {"missing": 5, "implemented": 9, "unverified": 0, "verified": 0}
-                     for dimension in ("data", "train", "eval")}
-    per_dimension.update({dimension: {"missing": 6, "implemented": 8, "unverified": 0, "verified": 0}
-                          for dimension in ("comparison", "export")})
+                     for dimension in cap.DIMENSIONS}
     for dimension in cap.DIMENSIONS:
         assert result.counts[dimension] == per_dimension[dimension]
     full = {MATH_ID, "llm/sft/starcoder1b-fim",
             "llm/sft/llama3-8b-xlam-function-calling", "llm/sft/rapidfire-multiconfig",
             "vlm/sft/granite-vision-line-comparison",
             "vlm/sft/paligemma2-refcoco-grounding",
-            "vlm/dpo/smolvlm-rlaif-v", "vlm/mpo/qwen2-5-vl-3b-mpo"}
-    partial = "llm/grpo/qwen2-5-3b-advanced-reward"
+            "vlm/dpo/smolvlm-rlaif-v", "vlm/mpo/qwen2-5-vl-3b-mpo",
+            "llm/grpo/qwen2-5-3b-advanced-reward"}
     for rid, row in result.rows.items():
         if rid in full:
             assert all(cell["status"] == "implemented" for cell in row.values())
-        elif rid == partial:
-            assert [row[d]["status"] for d in cap.DIMENSIONS] == [
-                "implemented", "implemented", "implemented", "missing", "missing"]
         else:
             assert all(cell["status"] == "missing" for cell in row.values())
 
@@ -236,10 +230,10 @@ def test_valid_evidence_schema_does_not_implicitly_promote_other_dimensions(sand
     promote(sandbox, "eval")
     result = cap.audit(sandbox.root, sandbox.recipes)
     assert result.ok and result.gpu_verified_recipes == 1
-    assert result.implemented_recipes == 9  # 八篇五维齐备（含 Granite / PaliGemma / DPO / MPO）+ advanced-reward 三维
-    # 八篇的 comparison/export 登记 implemented（只有代码，无 GPU 证据）；
+    assert result.implemented_recipes == 9  # 九篇五维齐备（含 Granite / PaliGemma / DPO / MPO / GSM8K）
+    # 九篇的 comparison/export 登记 implemented（只有代码，无 GPU 证据）；
     # 数学单篇的 verified 提升不改变其他篇的代码登记状态。
-    assert result.counts["comparison"]["missing"] == result.counts["export"]["missing"] == 6
+    assert result.counts["comparison"]["missing"] == result.counts["export"]["missing"] == 5
     assert result.counts["comparison"]["verified"] == result.counts["export"]["verified"] == 0
     assert "不自动更新 B2/B3" in cap.render(sandbox.root, sandbox.recipes)
 
